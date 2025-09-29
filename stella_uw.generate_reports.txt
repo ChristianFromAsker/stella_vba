@@ -1,0 +1,144 @@
+Option Compare Database
+Option Explicit
+Public Sub generate_master_list_extract(ByVal str_sql As String, ByVal us_or_eur As String)
+    Dim proc_name As String
+    proc_name = "generate_reports.generate_master_list_extract"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim current_db_name As String
+    Dim open_app As Boolean
+    Dim str_milestone As String
+    Dim str_app_path As String
+    
+    str_milestone = "1"
+    load.check_secondary_access_app
+    str_milestone = "1a"
+    
+    With load.secondary_access_app
+        
+        str_app_path = load.system_info.system_paths.common_path & "reports.accdb"
+        
+        current_db_name = ""
+        On Error Resume Next
+        current_db_name = .CurrentDb.Name
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        
+        open_app = False
+        If current_db_name = "" Then
+            open_app = True
+        ElseIf current_db_name <> str_app_path Then
+            .CloseCurrentDatabase
+            open_app = True
+        End If
+        
+        If open_app = True Then
+            .OpenCurrentDatabase str_app_path, False
+        End If
+        
+        .Visible = True
+        
+        str_milestone = "4"
+        On Error GoTo err_path
+        If us_or_eur = "eur" Then
+            .Run "master_view_report_per_deal", str_sql, load.system_info.app_continent
+        ElseIf us_or_eur = "us" Then
+            .Run "generate_master_deal_list_for_uw", str_sql, load.system_info.continents.americas
+        End If
+        
+err_path:
+        If Err.Number = 40351 Then
+            Err.Clear
+            MsgBox "PLEASE READ THIS. Complete the below instructions before moving on." _
+            & vbNewLine & vbNewLine & "We have a small issue which I will need your help to solve." _
+            & vbNewLine & vbNewLine & "Somwehere on your screen, there is a button which says 'enable content'. Please click it." _
+            & vbNewLine & vbNewLine & "You may see it in the top left of your screen. It might appear as a small Access window. If so, just make it larger to show the button." _
+            & vbNewLine & vbNewLine & "If do not see it, look on on your taskbar (the line at the bottom of your screen), for an Access (Stella) window called 'reports'. Click on it to show the button." _
+            & vbNewLine & vbNewLine & "If you don't see 'resports', you might need to hover your mouse cursor over the Access (Stella) app on the task bar. Then you'll see 'reports'. Click on it to show the button." _
+            & vbNewLine & vbNewLine & "When you have clicked on 'enable content', click 'ok' below and try again." _
+            , , "Small issue"
+            
+            On Error GoTo err_handler
+            If load.is_debugging = True Then On Error GoTo 0
+        
+            .CloseCurrentDatabase
+            .Visible = False
+            GoTo outro
+        End If
+        
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        
+        str_milestone = "5"
+        .CloseCurrentDatabase
+        
+        str_milestone = "6"
+        .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
+        .Visible = False
+        
+    End With
+    
+outro:
+    open_forms.working_on_it_f__close
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = str_milestone
+        .params = "str_sql = " & str_sql
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+Public Sub generate_policy_list_extract(str_sql As String)
+    Dim proc_name As String
+    proc_name = "generate_reports.generate_policy_list_extract"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+        load.check_secondary_access_app
+    With load.secondary_access_app
+        On Error Resume Next
+        .CloseCurrentDatabase
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        .OpenCurrentDatabase load.system_info.system_paths.common_path & "reports.accdb", False
+        .Visible = False
+        If load.system_info.app_continent = load.system_info.continents.americas Then
+            .Run "reports.generate_us_policy_list", str_sql
+        Else
+            .Run "generate_global_policy_report", str_sql
+        End If
+        .CloseCurrentDatabase
+        .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
+    End With
+
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = "str_sql = " & str_sql
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+    
+End Sub
+
