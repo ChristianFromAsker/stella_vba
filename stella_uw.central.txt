@@ -1,0 +1,1354 @@
+Option Compare Database
+Option Explicit
+
+Public Sub budget_home_change(ByVal deal_id As Long, budget_home_id As Long)
+    Dim proc_name As String
+    proc_name = "central.budget_home_change"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+    
+    If current_uw.can_change_budget_home_id = load.no Then
+        MsgBox "Sorry, you need to talk to a regional lead to change the Budget Home.", , "Not allowed to change Budget Home"
+        GoTo outro
+    End If
+    
+    str_sql = "UPDATE " & load.sources.deals_table & " SET budget_home_id = " & budget_home_id _
+    & " WHERE deal_id = " & deal_id
+    
+    conn.Execute str_sql
+    
+    'log change
+    Dim log_object As cls_log_object
+    Set log_object = New cls_log_object
+    With log_object
+        .changer_id = Environ("username")
+        .data_set = load.sources.deals_table
+        .field_name = "budget_home_id"
+        .new_value = budget_home_id
+        .change_source = proc_name
+        .record_id = deal_id
+    End With
+    Central.data_logger log_object
+    Set log_object = Nothing
+
+    Central.update_currencies deal_id
+    
+    str_sql = "UPDATE " & load.sources.policies_table & " SET budget_home_id = " & budget_home_id _
+    & " WHERE deal_id = " & deal_id
+    
+    conn.Execute str_sql
+
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = "deal_id = " & deal_id & ", budget_home_id = " & budget_home_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+Public Sub deal_status_was_changed(ByVal deal_id As Long, ByVal new_deal_status_id As Long)
+    load.call_stack = load.call_stack & vbNewLine & "central.deal_status_was_changed"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    If (new_deal_status_id = 6 Or new_deal_status_id = 436) Then
+        Central.limit_premium_and_summary_central deal_id
+    End If
+
+    'save new status
+    utilities.update_data "deal_status_id", new_deal_status_id, deal_id
+       
+    If CurrentProject.AllForms("deal_list_f").IsLoaded = True Then
+        Dim rs As ADODB.Recordset
+        Set rs = utilities.create_adodb_rs(conn, Forms("deal_list_f").RecordSource)
+        rs.Open
+            Set Forms(load.master_deal_list.form_name).Recordset = rs
+        rs.Close
+        Set rs = Nothing
+    End If
+    
+    'log change
+    Dim log_object As cls_log_object
+    Set log_object = New cls_log_object
+    With log_object
+        .changer_id = Environ("username")
+        .data_set = sources.deals_table
+        .field_name = "deal_status_id"
+        .new_value = new_deal_status_id
+        .record_id = deal_id
+    End With
+    Central.data_logger log_object
+    Set log_object = Nothing
+    
+    'update currencies
+    Central.update_currencies deal_id
+        
+    'check if new status is submission, or previous status was NDA. If yes, save current date as submission_date
+    If new_deal_status_id = load.deal_statuses.submission Or load.old_deal_status = load.deal_statuses.NDA Then
+        str_sql = "UPDATE " & load.sources.deals_table & " SET submission_date = '" & utilities.generate_sql_date(Date) & "' WHERE deal_id = " & deal_id
+        conn.Execute str_sql
+    End If
+    
+    'if status was NBI, preferred, expensed or UW, raise the was_quoted flag
+    str_sql = ""
+    
+    If new_deal_status_id = deal_statuses.nbi _
+    Or new_deal_status_id = deal_statuses.preferred _
+    Or new_deal_status_id = deal_statuses.expensed _
+    Or new_deal_status_id = deal_statuses.uw _
+    Or new_deal_status_id = deal_statuses.signed _
+    Or new_deal_status_id = deal_statuses.closed _
+    Or new_deal_status_id = deal_statuses.lost _
+    Then
+        str_sql = "UPDATE " & load.sources.deals_table & " SET was_quoted_id = " & load.yes & " WHERE deal_id = " & deal_id
+    End If
+    If new_deal_status_id = deal_statuses.declined Then
+        str_sql = "UPDATE " & load.sources.deals_table & " SET was_quoted_id = " & load.no & " WHERE deal_id = " & deal_id
+    End If
+    If str_sql <> "" Then conn.Execute str_sql
+    
+    'update message board and move folder if possible
+    Central.folder_check deal_id, new_deal_status_id
+    
+    'track latest status changes
+    conn.Execute "UPDATE " & load.sources.deals_table & " SET latest_status_change = '" & utilities.generate_sql_date(Date) & "' WHERE deal_id = " & deal_id
+    
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.deal_status_was_changed"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+
+Public Function get_nbi_template_path(Optional ByVal spa_law_id As Long, Optional ByVal spa_law As String)
+    load.call_stack = load.call_stack & vbNewLine & "central.get_nbi_template_path"
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String, strNBIAbb As String
+    Dim nbi_id As Integer
+    
+    'find nbi template based on spa law input
+    If spa_law <> "" Then
+        str_sql = "SELECT * FROM " & sources.jurisdictions_view & " WHERE jurisdiction = '" & spa_law & "'"
+    Else
+        str_sql = "SELECT * FROM " & sources.jurisdictions_view & " WHERE jurisdiction = " & spa_law_id
+    End If
+    
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        nbi_id = rs!nbi_template_id
+    rs.Close
+    
+    str_sql = "SELECT * From " & load.sources.menu_list_table & " WHERE menu_id = " & nbi_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        strNBIAbb = rs!Setting1
+    rs.Close
+    Set rs = Nothing
+    get_nbi_template_path = load.system_info.system_paths.template_path & "templates\NBI\NBI " & strNBIAbb & ".docx"
+End Function
+Public Function get_current_risk_status(ByVal deal_id As Long) As Long
+    load.call_stack = load.call_stack & vbNewLine & "central.get_current_risk_status"
+    Dim str_sql As String
+    str_sql = "SELECT deal_status_id FROM " & load.sources.deals_table & " WHERE deal_id = " & deal_id
+    Dim rs As ADODB.Recordset
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    With rs
+        .Open
+        If .RecordCount = 0 Then
+            get_current_risk_status = -1
+        Else
+            get_current_risk_status = !deal_status_id
+        End If
+        .Close
+    End With
+    Set rs = Nothing
+End Function
+
+Public Function are_there_rp_policies_on_deal(ByVal deal_id As Long) As Long
+    load.call_stack = load.call_stack & vbNewLine & "central.are_there_rp_policies_on_deal"
+    Dim rs As ADODB.Recordset
+    str_sql = "SELECT id FROM " & sources.policies_table & " WHERE is_deleted = 0 AND rp_on_layer = 93 AND deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    With rs
+        .Open
+            are_there_rp_policies_on_deal = CLng(.RecordCount)
+        .Close
+    End With
+    Set rs = Nothing
+End Function
+Public Sub limit_premium_and_summary_central(ByVal deal_id As Variant)
+    load.call_stack = load.call_stack & vbNewLine & "central.lmit_premium_and_summary_central"
+    On Error GoTo err_handler
+    If load.is_debugging = False Then On Error GoTo 0
+    Dim error_occured As Boolean
+    error_occured = False
+    
+    load.check_secondary_access_app
+    With load.secondary_access_app
+        .Visible = False
+        .CloseCurrentDatabase
+        .OpenCurrentDatabase load.system_info.system_paths.scripts_path, False
+        .Visible = False
+        
+        'Tuesday 17 Dec 2024, CK: Somehow, the script document is locked in an error, and I can't replace it or do anything. So I'm creating a redundancy.
+        On Error GoTo err_handler
+        .Run "limit_premium_and_summary_central", deal_id, load.system_info.app_continent
+        
+        'Tuesday 17 Dec 2024, CK: if an error was thrown, try the secondary script. It's the same as the primary,
+        'so if the code id bad, the error will continue. However, if the file is corrupted, this might work.
+        If error_occured = True Then
+            .OpenCurrentDatabase load.system_info.system_paths.scripts_path_secondary, False
+            .Visible = False
+            .Run "limit_premium_and_summary_central", deal_id, load.system_info.app_continent
+        End If
+        
+        .CloseCurrentDatabase
+        .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
+        .Visible = False
+    End With
+    Exit Sub
+
+outro:
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.limit_premium_and_summary_central"
+        .milestone = ""
+        .params = "deal_i = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    If error_occured = False Then
+        error_occured = True
+        Resume Next
+    Else
+        GoTo outro
+    End If
+    
+End Sub
+Public Function generate_program_summary(ByVal deal_id As Variant, format_as_html As Boolean, include_broker_commission As Boolean)
+    load.call_stack = load.call_stack & vbNewLine & "central.generate_program_summary"
+    'CK 30 September 2024: This shall be deleted, once we know old way is not required for central.limit_and_premium_central
+    
+    'intro
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    
+    Dim line_break
+    line_break = vbNewLine
+    If format_as_html = True Then line_break = "<br>"
+    Dim lead_limit As String
+    
+    Dim retention As Currency, lead_insurer As String, str_text As String
+    str_sql = "SELECT deal_id, deal_name, primary_insurer_hr, retention FROM " & sources.deals_view & " WHERE deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        If IsNull(rs!primary_insurer_hr) = False Then
+            lead_insurer = rs!primary_insurer_hr
+            retention = Nz(rs!retention, 0)
+        End If
+        str_text = "Primary insurer: " & lead_insurer & line_break
+    rs.Close
+    
+    str_sql = "SELECT * FROM " & sources.policies_view & " WHERE deal_id = " & deal_id & " ORDER BY layer_no"
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        If CLng(rs.RecordCount) = 0 Then
+            GoTo outro
+        End If
+        rs.MoveFirst
+        Dim current_layer As Integer, policy_limit As Variant, rol As Variant
+        current_layer = -1
+        Do Until rs.EOF = True
+            If rs!layer_no <> current_layer Then
+                str_text = str_text & line_break & "budget home: " & rs!budget_home _
+                    & line_break & "navins home: " & rs!navins_home _
+                    & line_break & "issuing entity: " & rs!issuing_entity _
+                    & line_break & make_numbering_pretty(rs!layer_no) & ": " & Format(rs!layer_limit, "#,###") _
+                    & " xs " & (Nz(rs!underlying_limit, 0) + retention) / 1000000 & "M" & line_break
+            End If
+            If rs!rp_on_layer = 93 Then
+                policy_limit = Nz(rs!layer_limit, 0) * Nz(rs!quota, 0)
+                If policy_limit = 0 Then
+                    rol = "n/a"
+                Else
+                    rol = FormatPercent(rs!policy_premium / policy_limit, 4)
+                End If
+                str_text = str_text & " RP Limit: " & Format(rs!layer_limit * rs!quota, "#,###") & " (" & FormatPercent(rs!quota, 4) & " of layer)" _
+                    & line_break & " RP Premium: " & Format(rs!policy_premium, "#,###") & " (ROL: " & rol & ")"
+                str_text = str_text & line_break & " Policy no: " & rs!policy_no_universal
+                If include_broker_commission = True Then
+                    str_text = str_text & line_break & "broker commission: " & rs!broker_commission * 100 & "%"
+                End If
+                If IsNull(rs!rp_on_layer) = False Then
+                    str_text = str_text & line_break & " RP on: " & rs!rp_on_layer_hr & line_break
+                End If
+            End If
+            current_layer = rs!layer_no
+            rs.MoveNext
+        Loop
+    rs.Close
+    Set rs = Nothing
+    generate_program_summary = str_text
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Function
+err_handler:
+    MsgBox "Something went wrong. Try once more. If it fails again, snip this to Christian." & vbNewLine & vbNewLine _
+        & "Error number: " & Err.Number & vbNewLine _
+        & "Error description: " & Err.Description & vbNewLine _
+        & "Where: central.generate_program_summary" & vbNewLine _
+        & "Parameters: deal_id = " & deal_id & vbNewLine _
+        & "App: Stella UW Eur", , " Whoopsie daisies (like Hugh Grant in Notting Hill)"
+    GoTo outro
+End Function
+Public Function make_numbering_pretty(ByVal layer_no As Long) As String
+    If layer_no = 0 Then
+        make_numbering_pretty = "Primary"
+    ElseIf layer_no = 1 Or layer_no = 6 Then
+        make_numbering_pretty = layer_no & "st xs"
+    ElseIf layer_no = 2 Then
+        make_numbering_pretty = layer_no & "nd xs"
+    ElseIf layer_no = 3 Then
+        make_numbering_pretty = layer_no & "rd xs"
+    ElseIf layer_no >= 4 And layer_no <= 20 Then
+        make_numbering_pretty = layer_no & "th xs"
+    End If
+End Function
+Public Sub StatusChange(ByVal obj_deal As cls_deal)
+    load.call_stack = load.call_stack & vbNewLine & "central.StatusChange"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    Dim str_form As String
+    str_form = "deal_details_f"
+    If CurrentProject.AllForms(str_form).IsLoaded = False Then
+        GoTo outro
+    End If
+    
+    ' Log the status change
+    Dim str_message As String
+    str_message = Date & " " & current_uw.initials & " changed status to " & obj_deal.deal_status & vbCrLf & obj_deal.message_board
+    
+    If Forms(str_form).Controls(load.deal_details.txt_broker_firm_id.field_name) = "" _
+        Or IsNull(Forms(str_form).Controls(load.deal_details.txt_broker_firm_id.field_name)) = True Then
+        GoTo outro
+    End If
+    
+    Dim str_actual_path As String
+    str_actual_path = Paths.folder_path_from_scripts(obj_deal.deal_id, "find")
+    
+    'check if Stella can find the folder. -1 means no. If yes, check if folder is where it is supposed to be. Move if not.
+    If str_actual_path = "-1" Then
+        ' Folder was not found. Pass message to Message Board.
+        str_message = Date & " The deal folder was not found. It may not exist or could be incorrectly named." & vbNewLine & str_message
+    Else
+        Dim str_normative_path As String
+        str_normative_path = Paths.folder_path_from_scripts(obj_deal.deal_id, "normative")
+        If str_normative_path = "-1" Then
+            str_message = Date & " Stella could not figure out where the deals hould be. Someone needs to investigate." & vbNewLine & str_message
+            utilities.update_data "MessageBoard", str_message, obj_deal.deal_id, True
+            Err.Description = "Paths.create_folder_path(obj_deal) returned -1"
+            GoTo err_handler
+        End If
+        If str_normative_path <> str_actual_path Then
+            ' Does a copy of the folder already exist at the target path? If yes, update Message Board but do nothing else.
+            ' Not sure if this could happen due to the above test though.
+            If Len(Dir(str_normative_path, vbDirectory)) > 1 And Len(Dir(str_actual_path, vbDirectory)) > 1 Then
+                str_message = Date & " Folder was not moved because a folder with identical name exsts. Talk to Christian." & vbNewLine & str_message
+            Else
+                ' The folder could be locked by Windows, hence the error handler.
+                On Error Resume Next
+                ' Move the folder.
+                Dim fso As Object
+                Set fso = CreateObject("Scripting.FileSystemObject")
+                
+                fso.movefolder str_actual_path, str_normative_path
+                On Error GoTo err_handler
+                If load.is_debugging = True Then On Error GoTo 0
+                'check if folder was moved
+                str_actual_path = Paths.folder_path_from_scripts(obj_deal.deal_id, "normative")
+                If str_normative_path = str_actual_path Then
+                    str_message = Date & " The Folder was moved to " & str_normative_path & " by Stella due to a change by " & current_uw.initials & "." & vbNewLine & str_message
+                Else
+                    str_message = Date & " Status was changed to " & obj_deal.deal_status & ", but the folder could not be moved to " & str_normative_path & " by Stella. Another attempt will be made later." & vbNewLine & str_message
+                End If
+                str_message = Replace(str_message, "\", "\\")
+            End If
+        End If
+    End If
+    
+    ' Update the message board if a message has been assigned.
+    utilities.update_data "MessageBoard", str_message, obj_deal.deal_id, True
+    
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.StatusChange"
+        .milestone = ""
+        .params = "obj_deal.deal_id = " & Nz(obj_deal.deal_id, "-1")
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    
+    GoTo outro
+End Sub
+Public Sub folder_check(ByVal deal_id As Long, ByVal new_deal_status_id As Long)
+    load.call_stack = load.call_stack & vbNewLine & "central.folder_check"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+        
+    Dim mandatory_fields As New Collection
+    Set mandatory_fields = mandatory_data.check_data(deal_id, load.mandatory_tests.folder_check)
+    If mandatory_fields.Count > 0 Then
+        GoTo outro
+    End If
+    
+    'check if target folder location is different between old deal status and new deal status
+    Dim new_deal_status_is_working As Boolean
+    Dim old_deal_status_is_working As Boolean
+    Dim deal_status As Variant
+    Dim deal_status_2 As Variant
+    
+    new_deal_status_is_working = False
+    old_deal_status_is_working = False
+    
+    If load.system_info.app_continent = load.system_info.continents.eurasia Then
+        For Each deal_status In load.col_deal_statuses_working
+            If deal_status = load.old_deal_status Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+    ElseIf load.system_info.app_continent = load.system_info.continents.americas Then
+        For Each deal_status In load.col_deal_statuses_quote_stage
+            If deal_status = load.old_deal_status Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+        
+        If old_deal_status_is_working = False Or new_deal_status_is_working = False Then
+            new_deal_status_is_working = False
+            old_deal_status_is_working = False
+        End If
+        
+        For Each deal_status In load.col_deal_statuses_live
+            If deal_status = load.old_deal_status Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+        
+    End If
+    
+    If old_deal_status_is_working = True And new_deal_status_is_working = True Then
+        GoTo outro
+    End If
+    
+    Dim message_board As String
+    Dim rs As ADODB.Recordset
+    Dim str_actual_path As String
+    Dim str_message As String
+    Dim str_sql As String
+    
+    'check if folder is created
+    str_sql = "SELECT deal_id, deal_name, is_folder_created FROM " & load.sources.deals_table _
+    & " WHERE deal_id = " & deal_id
+    
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    With rs
+        .Open
+        If rs!is_folder_created = "no" Then
+            GoTo outro
+        End If
+        .Close
+    End With
+    
+    'get current message board
+    str_sql = "SELECT deal_id, MessageBoard FROM " & load.sources.deals_table & " WHERE deal_id =  " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        message_board = Nz(rs!MessageBoard, "")
+    rs.Close
+    Set rs = Nothing
+    
+    'check if Stella can find the folder. -1 means no. If yes, check if folder is where it is supposed to be. Move if not.
+    str_actual_path = Paths.folder_path_from_scripts(deal_id, "find")
+    If str_actual_path = "-1" Then
+        ' Folder was not found. Pass message to Message Board.
+        str_message = Date & " The deal folder was not found. It may not exist or could be incorrectly named." & vbNewLine & message_board
+        GoTo update_message_board
+    End If
+    
+    Dim str_normative_path As String
+    str_normative_path = Paths.folder_path_from_scripts(deal_id, "normative")
+    If str_normative_path = "-1" Then
+        str_message = Date & " Stella could not figure out where the deals hould be. Someone needs to investigate." & vbNewLine & message_board
+        Err.Description = "Paths.create_folder_path(deal_id) returned -1"
+        GoTo update_message_board
+    End If
+    
+    If str_normative_path <> str_actual_path Then
+        
+        ' Does a copy of the folder already exist at the target path? If yes, update Message Board but do nothing else.
+        ' Not sure if this could happen due to the above test though.
+        If Len(Dir(str_normative_path, vbDirectory)) > 1 And Len(Dir(str_actual_path, vbDirectory)) > 1 Then
+            str_message = Date & " Folder was not moved because a folder with identical name exsts. Talk to Christian." & vbNewLine & message_board
+            GoTo update_message_board
+        End If
+            
+        Dim fso As Object
+        Set fso = CreateObject("Scripting.FileSystemObject")
+        
+        ' Move the folder.
+        ' The folder could be locked by Windows, hence the try-catch.
+        On Error Resume Next
+        fso.movefolder str_actual_path, str_normative_path
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        
+        'check if folder was moved
+        If Len(Dir(str_normative_path, vbDirectory)) = 0 Then
+            
+            str_sql = "SELECT folder_moving_id FROM " & load.sources.folder_moving_table _
+            & " WHERE deal_id = " & deal_id _
+            & " AND is_moved = 'no'" _
+            & " AND current_path = '" & Replace(str_actual_path, "\", "\\") & "'" _
+            & " AND is_deleted = 0"
+            
+            Set rs = utilities.create_adodb_rs(conn, str_sql)
+            With rs
+                .Open
+                If CLng(rs.RecordCount) = 0 Then
+                    str_sql = "INSERT INTO " & load.sources.folder_moving_table & "(deal_id, current_path)" _
+                    & " VALUES (" & deal_id _
+                    & ", '" & Replace(str_actual_path, "\", "\\") & "'" _
+                    & ")"
+            
+                    conn.Execute str_sql
+                End If
+                .Close
+            End With
+            Set rs = Nothing
+            
+            str_message = Date & " Folder could not be moved to " & str_normative_path & " by Stella. Another attempt will be made later." & vbNewLine & message_board
+        Else
+            str_message = Date & " The Folder was moved to " & str_normative_path & " by Stella due to a change by " & Environ("username") & "." & vbNewLine & message_board
+        End If
+        
+    End If
+    
+update_message_board:
+    str_message = Replace(str_message, "\", "\\")
+    utilities.update_data "MessageBoard", str_message, deal_id, True
+    
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.folder_check"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    
+    GoTo outro
+End Sub
+Public Sub populate_deal_details_f(ByVal deal_id As Long)
+    load.call_stack = load.call_stack & vbNewLine & "central.populate_deal_details"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim rs As ADODB.Recordset
+    Dim str_form As String: str_form = "deal_details_f"
+    Dim str_sql As String
+    str_sql = "SELECT * FROM " & load.sources.risk_details_f_view & " WHERE deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        With Forms(str_form)
+            
+            'NDA stage
+            !deal_id = rs!deal_id
+            !deal_status_id = Nz(rs!deal_status_id, 1)
+            !deal_name = rs!deal_name
+            !broker_firm_id = rs!broker_firm_id
+            !broker_person = rs!broker_person
+            !spa_law = rs!spa_law
+            If load.system_info.app_continent = load.system_info.continents.americas Then
+                !stage_id = rs!deal_stage_id
+                !max_limit_quoted = rs!max_limit_quoted
+            End If
+            !quote_due_date = rs!quote_due_date
+            !was_quoted_id = rs!was_quoted_id
+            !is_test_deal_id = rs!is_test_deal_id
+            
+            'Deal and target info
+            !deal_currency = rs!deal_currency
+            !ev = rs!ev
+            !target_legal_name = rs!target_legal_name
+            !target_business_name = rs!target_business_name
+            !target_country = rs!TargetDomicile
+            !target_main_jurisdiction_id = rs!target_main_jurisdiction_id
+            !target_sub_sector_id = rs!target_sub_sector_id
+            !target_super_sector_id = rs!target_super_sector_id
+            If load.system_info.app_continent = load.system_info.continents.americas Then
+                !target_sic_code = rs!target_sic_code
+                !target_naic_code = rs!target_naic_code
+            End If
+            !spa_signing_date = rs!spa_signing_date
+            !closing_date = rs!closing_date
+            !target_desc = rs!target_desc
+            
+            'advisors
+            !SellerLegalFirm = rs!SellerLegalFirm
+            !buyer_law_firm_1_id = rs!buyer_law_firm_1_id
+            !buyer_law_firm_2_id = rs!buyer_law_firm_2_id
+            !BuyerFinancialCounsel = rs!buyer_financial_firm_id
+            If load.system_info.app_continent = load.system_info.continents.eurasia Then
+                !UwCounselPerson1 = rs!UwCounselPerson1
+                !UwCounselPerson2 = rs!UwCounselPerson2
+            End If
+            !uw_financial_advisor_id = rs!uw_financial_advisor_id
+            !uw_law_firm_id = rs!uw_law_firm_id
+            
+            'Insurance info
+            !risk_type_id = rs!risk_type_id
+            !nbi_prepper_id = rs!nbi_prepper_id
+            !nbi_prepper_full_name = rs!nbi_prepper
+            !primary_uw = rs!primary_uw_id
+            !primary_uw_full_name = rs!primary_uw_full_name
+            !secondary_uw = rs!secondary_uw_id
+            !secondary_uw_full_name = rs!secondary_uw_full_name
+            !analyst_id = rs!analyst_id
+            !analyst_full_name = rs!analyst_full_name
+            !inception_date = rs!inception_date
+            !risk_feel_id = rs!risk_feel_id
+            !primary_or_xs_id = rs!primary_or_xs_id
+            !budget_home_id = rs!budget_home_id
+            !program_limit = rs!program_limit
+            !primary_insurer = rs!primary_insurer
+            !retention = rs!retention
+            If load.system_info.app_continent = load.system_info.continents.americas Then
+                !internal_approver_quote_id = rs!internal_approver_quote_id
+                !internal_approver_quote_full_name = rs!internal_approver_quote_full_name
+                !internal_approver_binding_id = rs!internal_approver_binding_id
+                !internal_approver_binding_full_name = rs!internal_approver_binding_full_name
+                !retention_dropped = rs!drop_end
+                !drop_period = rs!drop_period
+            End If
+            !policy_period_in_months = rs!policy_period_in_months
+            
+            'Buyer and seller info
+            !seller_business_name = rs!seller_business_name
+            !UltimateSeller = rs!UltimateSeller
+            !insured_legal_name = rs!insured_legal_name
+            !buyer_business_name = rs!buyer_business_name
+            !ultimate_buyer = rs!UltimateBuyer
+            !insured_registered_country_id = rs!insured_registered_country_id
+            load.deal_details.add_regions_to_insured_main_region_id
+            !insured_main_region_id = rs!insured_main_region_id
+        
+            'submission notes
+            'only shown if the user click on 'expand'
+            
+            'financial info
+            !uw_fee = rs!uw_fee_amount
+            !uw_fee_due_date = rs!uw_fee_due_date
+            !uw_fee_received_date = rs!uw_fee_received_date
+            !counsel_fee = rs!counsel_fee_amount
+            !counsel_fee_due_date = rs!counsel_fee_due_date
+            !counsel_fee_received_date = rs!counsel_fee_received_date
+            !net_uw_fee = !uw_fee - !counsel_fee
+            !signing_premium_amount = rs!signing_invoice_amount
+            !signing_premium_due_date = rs!signing_premium_due_date
+            !signing_premium_received_date = rs!signing_premium_received_date
+            !total_premium = rs!total_rp_premium_on_deal
+            !closing_premium_amount = rs!total_rp_premium_on_deal - rs!signing_invoice_amount
+            !closing_premium_due_date = rs!closing_premium_due_date
+            !closing_premium_received_date = rs!closing_premium_received_date
+            
+            'misc
+            If load.system_info.app_continent = load.system_info.continents.americas Then
+                !surplus_broker_firm = rs!surplus_broker_firm
+                !surplus_broker_person = rs!surplus_broker_person
+                !surplus_broker_license_no = rs!surplus_broker_license_no
+            End If
+            !is_underwritten = rs!is_underwritten
+            !Comments = rs!Comments
+            !message_board = rs!MessageBoard
+            
+            'admin
+            'only shown if user cliking on 'expand'
+            
+        End With
+    rs.Close
+    
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.populate_deal_details_f"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+Public Sub update_currencies(ByVal deal_id As Long)
+    load.call_stack = load.call_stack & vbNewLine & "central.update_currencies"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    'check that mandatory fields are populated
+    If load.deal_details.is_init = False Then load.deal_details.init deal_id
+    
+    Dim missing_fields As New Collection
+    Set missing_fields = mandatory_data.check_data(deal_id, load.mandatory_tests.update_currencies)
+    If missing_fields.Count > 0 Then
+        GoTo outro
+    End If
+    
+    Dim budget_home_id As Integer
+    Dim deal_currency As String
+    Dim deal_date As Date
+    Dim fx_date As Date
+    Dim fx_deal As Single
+    Dim fx_local As Single
+    Dim local_currency As String
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+    
+    str_sql = "SELECT deal_id, deal_status_id, create_date, inception_date, deal_currency, budget_home_id FROM " & load.sources.risk_details_f_view & " WHERE deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    With rs
+        .Open
+        If Not IsNull(!inception_date) And (!deal_status_id = 6 Or !deal_status_id = 436) Then
+            deal_date = !inception_date
+        Else
+            deal_date = !create_date
+        End If
+        deal_currency = !deal_currency
+        budget_home_id = !budget_home_id
+        .Close
+    End With
+    
+    str_sql = "SELECT entity_id, local_currency FROM " & load.sources.entities_table & " WHERE entity_id = " & budget_home_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        local_currency = rs!local_currency
+    rs.Close
+
+    str_sql = "SELECT * FROM " & load.sources.currencies_table _
+    & " WHERE currency_date <= '" & utilities.generate_sql_date(deal_date) & "'" _
+    & " ORDER BY currency_date DESC LIMIT 1"
+
+    'find rates and send to deals_t
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        
+        str_sql = "UPDATE " & load.sources.deals_table & " SET" _
+        & " currency_date = '" & utilities.generate_sql_date(rs!currency_date.value) & "'" _
+        & ", currency_rate_local = " & Replace(rs.Fields(local_currency).value, ",", ".") _
+        & ", currency_rate_deal = " & Replace(rs.Fields(deal_currency).value, ",", ".") _
+        & ", currency_rate_eurusd = " & Replace(rs.Fields("USD").value, ",", ".") _
+        & " WHERE deal_id = " & deal_id
+
+        'log change
+        Dim log_object As cls_log_object
+        Set log_object = New cls_log_object
+        With log_object
+            .change_source = "central.update_currencies"
+            .changer_id = "stella.birkelund"
+            .data_set = load.sources.deals_table
+            .field_name = ""
+            .new_value = ""
+            .executed_sql = str_sql
+            .comment = ""
+            .record_id = deal_id
+        End With
+        Central.data_logger log_object
+        Set log_object = Nothing
+    rs.Close
+    Set rs = Nothing
+    
+    conn.Execute str_sql
+    
+outro:
+    If Not rs Is Nothing Then
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.update_currencies"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    
+    GoTo outro
+    
+End Sub
+Public Function find_vat_home(ByVal obj_deal As cls_deal, ByVal conn As ADODB.Connection) As Boolean
+    load.call_stack = load.call_stack & vbNewLine & "central.find_vat_home"
+    Dim must_find_vat_home As Boolean
+    must_find_vat_home = False
+        If obj_deal.vat_home <> 666 Then
+            find_vat_home = False
+            Exit Function
+        End If
+        If obj_deal.creating_uw = 666 Then
+            must_find_vat_home = True
+        Else
+            'Check if the budget_home of the deal = budget_home of uw. If yes, this is the VAT home. If not, UW must explicitly decide.
+            Dim rs As ADODB.Recordset, str_sql As String
+            str_sql = "SELECT * FROM " & load.sources.underwriters_view & " WHERE id = " & obj_deal.creating_uw
+            Set rs = utilities.create_adodb_rs(conn, str_sql)
+            rs.Open
+                 If rs!budget_home = obj_deal.budget_home Then
+                    'add further check if budget_home = budget home of current_uw
+                    utilities.update_data "vat_home", rs!entity_id, obj_deal.deal_id, True
+                    'Update deal view with the vat home
+                    Central.populate_deal_details_f obj_deal.deal_id
+                    must_find_vat_home = False
+                Else
+                    must_find_vat_home = True
+                End If
+            rs.Close
+        End If
+        If must_find_vat_home = True Then
+            'Open form to provide vat home
+            Dim str_form As String
+            str_form = "vat_entity_f"
+            DoCmd.OpenForm str_form
+            With Forms(str_form)
+                !deal_id = obj_deal.deal_id
+                !deal_name = obj_deal.deal_name
+            End With
+            'Sub must be run again when vat_home has been populated.
+        End If
+    find_vat_home = must_find_vat_home
+End Function
+Public Sub spa_law_was_updated(ByVal deal_id As Long)
+    'Purpose: Update RPEntity (also referred to as budget_home) based on a change in spa_law
+    
+    load.call_stack = load.call_stack & vbNewLine & "central.spa_law_was_updated"
+    
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    Dim str_sql As String, str_spa_law As String
+    Dim rs As ADODB.Recordset, budget_home As String
+    
+    'check that spa_law is populated, and retrieve it for messageboard
+    str_sql = "Select deal_id, spa_law, budget_home FROM " & sources.risk_details_f_view & " WHERE deal_id =  " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        If IsNull(rs!spa_law) Or rs!spa_law = "" Then
+            GoTo outro
+        Else
+            str_spa_law = rs!spa_law
+        End If
+    rs.Close
+    
+    'find budget_home for spa_law and update the deal
+    str_sql = "SELECT * FROM " & sources.jurisdictions_view & " WHERE jurisdiction = '" & str_spa_law & "'"
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        str_sql = "UPDATE " & sources.deals_table & " SET budget_home_id = " & rs!budget_home_id & " WHERE deal_id = " & deal_id
+        conn.Execute str_sql, adExecuteNoRecords
+        'log change
+        Dim log_object As cls_log_object
+        Set log_object = New cls_log_object
+        With log_object
+            .changer_id = "stella.birkelund"
+            .data_set = sources.deals_table
+            .field_name = "budget_home"
+            .new_value = rs!budget_home_id
+            .record_id = deal_id
+        End With
+        Central.data_logger log_object
+    rs.Close
+    
+    'update message_board
+    'Fetch current messageboard
+    str_sql = "SELECT deal_id, messageboard, budget_home FROM " & load.sources.risk_details_f_view & " WHERE deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        Dim str_message As String
+        str_message = Nz(rs!MessageBoard, "")
+        '11 Feb 2025, CK: Somehow, some of these strings have gotten a ' in it. That breaks the sql query. Hence, any ' is removed.
+        str_message = Replace(str_message, "'", "")
+        budget_home = Nz(rs!budget_home, "-1")
+    rs.Close
+    
+    'Update messageboard with new info
+    str_message = Date & " " & Environ("username") & " changed SPA law to " & str_spa_law _
+        & vbNewLine & Date & " " & "Stella set budget home to " & budget_home _
+        & vbNewLine & str_message
+    str_sql = "UPDATE " & sources.deals_table & " SET MessageBoard = '" & str_message & "' WHERE deal_id = " & deal_id
+    conn.Execute str_sql, adExecuteNoRecords
+    
+outro:
+    If Not rs Is Nothing Then
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.spa_law_was_changed"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    
+    GoTo outro
+End Sub
+Public Function create_new_deal() As Long
+    load.call_stack = load.call_stack & vbNewLine & "central.create_new_deal"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    'add record to deals_t
+    Dim str_sql As String
+    str_sql = "INSERT INTO " & load.sources.deals_table & " (deal_status_id, creating_uw, messageboard) VALUES (" _
+        & "1" _
+        & ", " & current_uw.uw_id _
+        & ", '" & Date & " " & current_uw.initials & " created the deal.'" _
+        & ")"
+    conn.Execute str_sql
+    
+    'Fetch deal_id for newly created deal
+    str_sql = "SELECT deal_id FROM " & sources.deals_table & " ORDER BY deal_id DESC LIMIT 1"
+    Dim rs As ADODB.Recordset
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        Dim deal_id As Long
+        deal_id = rs!deal_id
+        create_new_deal = rs!deal_id
+    rs.Close
+    
+    'log change
+    Dim log_object As cls_log_object
+    Set log_object = New cls_log_object
+    With log_object
+        .changer_id = Environ("username")
+        .data_set = sources.deals_table
+        .field_name = "deal_id"
+        .new_value = deal_id
+        .record_id = deal_id
+    End With
+    Central.data_logger log_object
+    Set log_object = Nothing
+    
+    'insert primary policy
+    str_sql = "INSERT INTO " & load.sources.policies_table _
+        & " (deal_id, layer_no, quota, rp_on_layer, layer_limit, budget_home_id, navins_home_id, issuing_entity_id)" _
+        & " VALUES(" & deal_id & ", 0,1, 93, 100, " & current_uw.budget_home_id & ", " & current_uw.budget_home_id & ", " & current_uw.budget_home_id & ")"
+    conn.Execute str_sql
+
+    'get id of new policy and create policy number
+    str_sql = "SELECT id FROM " & sources.policies_table & " ORDER BY id DESC LIMIT 1"
+    Dim policy_id As Long
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        policy_id = rs!id
+    rs.Close
+    Dim stella_policy_no As String
+    stella_policy_no = CStr(policy_id)
+    If Len(stella_policy_no) <= 7 Then
+        Do Until Len(stella_policy_no) = 8
+            stella_policy_no = "0" & stella_policy_no
+        Loop
+    End If
+    stella_policy_no = "RPMA" & stella_policy_no
+    conn.Execute "UPDATE " & sources.policies_table & " SET stella_policy_no = '" & stella_policy_no & "' WHERE id = " & policy_id
+        
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Function
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.create_new_deal"
+        .milestone = ""
+        .params = "deal_id = " & deal_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    
+    GoTo outro
+    
+End Function
+Public Sub submission_email()
+    load.call_stack = load.call_stack & vbNewLine & "central.submission_email"
+    'intro
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    If CurrentProject.AllForms("sub_control_f").IsLoaded = False Then Exit Sub
+    
+    'list columns
+    Dim arr_headers(0 To 7, 0 To 1) As Variant
+    Dim i As Long: i = 0
+    arr_headers(i, 0) = "deal name and deadline"
+    arr_headers(i, 1) = "'10%'": i = i + 1
+    arr_headers(i, 0) = "broker"
+    arr_headers(i, 1) = "'5%'": i = i + 1
+    arr_headers(i, 0) = "deal info"
+    arr_headers(i, 1) = "'25%'": i = i + 1
+    arr_headers(i, 0) = "key figures"
+    arr_headers(i, 1) = "'10%'": i = i + 1
+    arr_headers(i, 0) = "key financials"
+    arr_headers(i, 1) = "'10%'": i = i + 1
+    arr_headers(i, 0) = "transaction structure"
+    arr_headers(i, 1) = "'15%'": i = i + 1
+    arr_headers(i, 0) = "advisors"
+    arr_headers(i, 1) = "'10%'": i = i + 1
+    arr_headers(i, 0) = "rp status"
+    arr_headers(i, 1) = "'15%'": i = i + 1
+    
+    'create email body
+    'submission table
+    Dim submission_table As String
+    submission_table = "Submissions: <br><TABLE width=""85%"" Border=""1"", Cellspacing=""0""><TR>" ' configure the table
+    For i = 0 To UBound(arr_headers)
+        submission_table = submission_table & "<TD width=" & arr_headers(i, 1) & ", Align='Center'><b><p style='font-size:18px'>" & arr_headers(i, 0) & " &nbsp;</p></TD>"
+    Next i
+    submission_table = submission_table & "</TR>"
+    
+    'uw table
+    Dim uw_table As String
+    ' configure the table
+    uw_table = "In underwriting: <br><TABLE width=""60%"" Border=""1"", Cellspacing=""0""><TR>"
+    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>deal name &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>underwriter &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>risk type &nbsp;</p></TD>"
+    uw_table = uw_table & "</TR>"
+    
+    'table for quoted and declined deals
+    Dim quoted_declined_table As String
+    quoted_declined_table = "Quoted and declined: <br><TABLE width=""80%"" Border=""1"", Cellspacing=""0""><TR>" ' configure the table
+    For i = 0 To UBound(arr_headers)
+        quoted_declined_table = quoted_declined_table & "<TD width=" & arr_headers(i, 1) & ", Align='Center'><b><p style='font-size:18px'>" & arr_headers(i, 0) & " &nbsp;</p></TD>"
+    Next i
+    quoted_declined_table = quoted_declined_table & "</TR>"
+    ' add data to the tables
+    Dim str_sql As String, due_time As String
+    str_sql = Split(Forms!sub_control_f.RecordSource, "ORDER BY")(0) & " ORDER BY due_date, due_time"
+    Dim rs As ADODB.Recordset
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        Dim j As Long, temp_value As String
+        For i = 1 To CLng(rs.RecordCount)
+            If rs!deal_status_id = 481 Or rs!deal_status_id = 7 Or rs!deal_status_id = 8 Or rs!deal_status_id = 9 Or rs!deal_status_id = 2 Then
+                temp_value = "<TD><center>" & rs!deal_name
+                If IsNull(rs!due_date) = False Then
+                    If Len(rs!due_time) = 8 And InStr(rs!due_time, ":") = 3 Then
+                        due_time = Left(rs!due_time, 5)
+                    Else
+                        due_time = Nz(rs!due_time, " ")
+                    End If
+                    temp_value = temp_value & "<br><br>" & rs!due_date _
+                    & " <br>(" & utilities.weekday_converter(rs!due_date) & ")" _
+                    & "<br>" & due_time _
+                    & "<br><br>" & rs!risk_type
+                    
+                End If
+                temp_value = temp_value & "</TD>"
+                temp_value = temp_value & "<TD><center>" & rs!broker_firm_spa & "</TD>"
+                temp_value = temp_value & "<TD><center>" & Replace(Nz(rs!deal_info, ""), vbNewLine, "<br>") & "</TD>"
+                temp_value = temp_value & "<TD><center> EV: " & rs!deal_currency & " " & Format(rs!ev, "###,###") & "<br> Limits: " & rs!submission_limits & "</TD>"
+                temp_value = temp_value & "<TD><center> Target EBITDA: " & rs!target_ebitda & "<br>" & rs!key_financials & "</TD>"
+                
+                'transaction structure
+                temp_value = temp_value & "<TD><center> Buyer: " & rs!buyer_business_name _
+                & "<br> Seller: " & rs!seller_business_name _
+                & "<br> Target: " & rs!target_business_name _
+                & "<br> Transaction style: " & rs!transaction_style_hr & "<br> Expected signing: " & rs!expected_signing_text & "</TD>"
+                    
+                'advisors
+                temp_value = temp_value & "<TD><center> Buy side: " & rs!advisors_hr & "<br> Sell side: " & rs!seller_advisors_hr & "</TD>"
+                temp_value = temp_value & "<TD><center> NBI prepper: " & Nz(rs!nbi_prepper_hr, "not allocated") & "<br> Status: " & rs!status_hr _
+                    & "<br>" & rs!submission_notes & "</TD>"
+                If rs!deal_status_id = 481 Then
+                    submission_table = "<TR>" & submission_table & temp_value & "</TR>"
+                ElseIf rs!deal_status_id = 7 Or rs!deal_status_id = 8 Or rs!deal_status_id = 9 Or rs!deal_status_id = 2 Then
+                    quoted_declined_table = "<TR>" & quoted_declined_table & temp_value & "</TR>"
+                End If
+            End If
+            
+            'add data to UW table
+            If rs!deal_status_id = 3 Or rs!deal_status_id = 4 Or rs!deal_status_id = 5 Then
+                uw_table = uw_table & "<TR><TD><center> " & rs!deal_name & "</TD>"
+                uw_table = uw_table & "<TD><center> " & rs!primary_uw_hr & "</TD>"
+                uw_table = uw_table & "<TD><center> " & rs!risk_type & "</TD></TR>"
+            End If
+            rs.MoveNext
+        Next i
+        submission_table = submission_table & "</Table>"
+        quoted_declined_table = quoted_declined_table & "</Table>"
+        uw_table = uw_table & "</Table>"
+    rs.Close
+    
+    'prepare email
+    Dim olApp As New Outlook.Application
+    Dim olMail As MailItem
+    Set olMail = olApp.CreateItem(olMailItem)
+    With olMail
+        .To = ""
+        .cc = ""
+        .Subject = "submission status per " & utilities.weekday_converter(Date)
+        .HTMLBody = submission_table & "<br><br>" & uw_table & "<br><br>" & quoted_declined_table
+        .Display
+    End With
+    
+outro:
+    If Not rs Is Nothing Then
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.submission_email"
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    
+    GoTo outro
+End Sub
+
+Public Sub data_logger(log_object As cls_log_object)
+    Dim str_milestone As String
+    load.call_stack = load.call_stack & vbNewLine & "central.data_logger"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    Dim input_value As Variant
+    
+    str_milestone = "1"
+    str_sql = "INSERT INTO " & sources.log_data_table & " (app_name, app_continent, data_set_id, field_name, new_value, executed_sql, changer_id, comment, record_id, change_source) VALUES(" _
+    & "'" & load.system_info.app_name & "'" _
+    & ", '" & load.system_info.app_continent & "'" _
+    & ", '" & log_object.data_set & "'" _
+    & ", '" & log_object.field_name & "'" _
+    & ", '" & log_object.new_value & "'" _
+    & ", '" & Replace(log_object.executed_sql, "'", """") & "'" _
+    & ", '" & log_object.changer_id & "'" _
+    & ", '" & Replace(log_object.comment, "'", """") & "'" _
+    & ", " & log_object.record_id _
+    & ", '" & log_object.change_source & "'" _
+    & ")"
+    
+    str_milestone = "2"
+    conn.Execute str_sql
+    
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Sub
+
+err_handler:
+
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.data_logger"
+        .milestone = "str_sql = " & str_sql _
+        & vbNewLine & vbNewLine & "str_milestone = " & str_milestone
+        .params = "log_object.record_id = " & log_object.record_id _
+        & ", log_object.data_set = " & log_object.data_set _
+        & ", log_object.field_name = " & log_object.field_name
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    GoTo outro
+    
+End Sub
+
+Public Sub search_from_main_menu()
+    load.call_stack = load.call_stack & vbNewLine & "central.search_from_main_menu"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+ 
+    Dim str_input As String
+    Dim str_condition As String
+    Dim str_search_object As String
+    Dim search_input
+    Dim str_form As String
+    str_form = "MenuMainF"
+    search_input = Forms(str_form)!search_input
+    
+    If search_input = "" Then
+        GoTo outro
+    End If
+    
+    With Forms(str_form)
+        If !exact_match = "no" Then
+            str_condition = "deal_name" & " LIKE '%" & search_input & "%'"
+        Else
+            str_condition = "deal_name" & " = '" & search_input & "'"
+        End If
+
+        str_condition = str_condition & " OR deal_id = '" & search_input & "'"
+    
+        Dim str_sql As String
+        str_sql = "SELECT deal_id FROM " & load.sources.policies_view & " WHERE policy_no_universal = '" & search_input & "'"
+        Dim rs As ADODB.Recordset
+        Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+            If rs.RecordCount > 0 Then
+                str_condition = str_condition & " OR deal_id = " & rs!deal_id
+            End If
+        rs.Close
+        Set rs = Nothing
+    
+        Select Case !search_status
+            Case "nda"
+                str_condition = str_condition & " AND deal_status_id = 1"
+            Case "nbi"
+                str_condition = str_condition & " AND deal_status_id = 2"
+            Case "preferred"
+                str_condition = str_condition & " AND deal_status_id = 3"
+            Case "expensed"
+                str_condition = str_condition & " AND deal_status_id = 4"
+            Case "underwriting"
+                str_condition = str_condition & " AND deal_status_id = 5"
+            Case "signed"
+                str_condition = str_condition & " AND deal_status_id = 6"
+            Case "closed"
+                str_condition = str_condition & " AND deal_status_id = 436"
+            Case "declined"
+                str_condition = str_condition & " AND deal_status_id = 7"
+            Case "cancelled"
+                str_condition = str_condition & " AND deal_status_id = 8"
+            Case "lost"
+                str_condition = str_condition & " AND deal_status_id = 9"
+        End Select
+    End With
+    
+    open_forms.deal_list_f
+    With load.master_deal_list
+        .default_filters
+        .update_data str_condition
+        .paint_master_deal_list
+    End With
+    
+    Forms("deal_list_f").Controls("top_left").SetFocus
+    Forms("deal_list_f").Controls("cmd_refresh").SetFocus
+    
+outro:
+    If Not rs Is Nothing Then
+        If rs.State = 1 Then rs.Close
+        Set rs = Nothing
+    End If
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "central.search_from_main_menu"
+        .milestone = ""
+        .params = "str_condition = " & str_condition
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    
+    GoTo outro
+End Sub
+
+

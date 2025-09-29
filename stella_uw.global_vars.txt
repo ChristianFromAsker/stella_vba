@@ -1,0 +1,300 @@
+Option Compare Database
+Option Explicit
+
+' data fields
+Private Type typ_data_fields
+    analyst As New cls_field
+    analyst_id As New cls_field
+    
+    broker_firm As New cls_field
+    broker_firm_id As New cls_field
+    budget_home As New cls_field
+    budget_home_id As New cls_field
+    buyer_business_name As New cls_field
+    buyer_law_firm_1 As New cls_field
+    buyer_law_firm_1_id As New cls_field
+    buyer_law_firm_2 As New cls_field
+    buyer_law_firm_2_id As New cls_field
+    
+    closing_date_expected As New cls_field
+    
+    deal_id As New cls_field
+    deal_info As New cls_field
+    deal_name As New cls_field
+    deal_status As New cls_field
+    deal_status_id As New cls_field
+    
+    ev As New cls_field
+    
+    is_repeat_buyer As New cls_field
+    
+    max_limit_quoted As New cls_field
+    
+    nbi_deadline As New cls_field
+    nbi_prepper As New cls_field
+    
+    primary_uw As New cls_field
+    primary_uw_id As New cls_field
+    
+    requote_info As New cls_field
+    risk_type As New cls_field
+    
+    second_uw As New cls_field
+    second_uw_id As New cls_field
+    submission_limits As New cls_field
+    submission_notes As New cls_field
+    
+    target_business_name As New cls_field
+    target_description As New cls_field
+    
+    uw_progress As New cls_field
+End Type
+Public data_fields As typ_data_fields
+
+Private Type typ_budget_continents
+    asiapac As Long
+    emea As Long
+    north_america As Long
+End Type
+Public budget_continents As typ_budget_continents
+
+Public Type typ_budget_homes
+    uk As cls_budget_home
+    us As cls_budget_home
+End Type
+Public budget_homes As typ_budget_homes
+
+Private Type typ_budget_regions
+    benelux As cls_budget_region
+    dach As cls_budget_region
+    med As cls_budget_region
+    nordics As cls_budget_region
+    us As cls_budget_region
+End Type
+Public budget_regions As typ_budget_regions
+
+Enum buget_homes
+    rp_us = 93
+End Enum
+
+Public col_deal_statuses As New Collection
+
+Public Type typ_interfaces
+    live_deals_f As cls_form_live_deals
+    quick_change_f As cls_form_quick_change
+    weekly_view_f As cls_form_weekly_view
+End Type
+Public interfaces As typ_interfaces
+
+Private Type typ_risk_types
+    contingency As Long
+    tax As Long
+    wi As Long
+End Type
+Public risk_types As typ_risk_types
+
+
+
+Public Sub init()
+    global_vars.init_budget_homes
+    global_vars.init_col_deal_statuses
+    global_vars.init_data_fields
+    global_vars.init_interfaces
+    
+    With risk_types
+        .contingency = 105
+        .tax = 110
+        .wi = 100
+    End With
+    
+End Sub
+Public Sub init_data_fields()
+    Dim proc_name As String
+    proc_name = "global_vars.init_data_fields"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    With global_vars.data_fields
+        With .analyst_id
+            .data_table = "deals_t"
+            .field_name_in_table = "analyst_id"
+        End With
+        With .budget_home_id
+            .data_table = "deals_t"
+            .field_name_in_table = "budget_home_id"
+        End With
+        With .closing_date_expected
+            .data_table = "deals_t"
+            .field_name_in_table = "closing_date_expected"
+        End With
+        With .deal_id
+            .data_table = "deals_t"
+            .field_name_in_table = "deal_id"
+        End With
+        With .deal_status_id
+            .data_table = "deals_t"
+            .field_name_in_table = "deal_status_id"
+        End With
+        With .requote_info
+            .data_table = "deals_t"
+            .field_name_in_table = "re_quote_info"
+        End With
+        With .second_uw_id
+            .data_table = "deals_t"
+            .field_name_in_table = "secondary_uw"
+        End With
+        With .submission_notes
+            .data_table = "deals_t"
+            .field_name_in_table = "submission_notes"
+        End With
+        With .uw_progress
+            .data_table = "deals_t"
+            .field_name_in_table = "uw_progress"
+        End With
+    End With
+
+    Dim field_control As cls_field
+'    For Each field_control In global_vars.data_fields
+'        With field_control
+'            .field_type = load.field_type.text_field
+'        End With
+'    Next field_control
+outro:
+
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+Public Sub init_interfaces()
+    Dim proc_name As String
+    proc_name = "global_vars.init_interfaces"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    With global_vars.interfaces
+        
+        'live deals
+        If .live_deals_f Is Nothing Then
+            Set .live_deals_f = New cls_form_live_deals
+        End If
+        If .live_deals_f.is_init = False Then
+           .live_deals_f.init
+        End If
+        
+        'quick change
+        If .quick_change_f Is Nothing Then
+            Set .quick_change_f = New cls_form_quick_change
+        End If
+        If .quick_change_f.is_init = False Then
+            .quick_change_f.init
+        End If
+        
+        'weekly view
+        If .weekly_view_f Is Nothing Then
+            Set .weekly_view_f = New cls_form_weekly_view
+        End If
+        If .weekly_view_f.is_init = False Then
+            .weekly_view_f.init
+        End If
+    
+    End With
+
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+    
+End Sub
+Public Sub init_budget_homes()
+    With global_vars.budget_continents
+        .asiapac = 485
+        .emea = 478
+    End With
+    
+    With global_vars.budget_homes
+        Set global_vars.budget_homes.uk = New cls_budget_home
+        With .uk
+            .budget_currency = "EUR"
+            .budget_home_id = 81
+            .budget_home_name = "UK"
+            .local_currency = "GBP"
+        End With
+        
+        Set global_vars.budget_homes.us = New cls_budget_home
+        With .us
+            .budget_currency = "USD"
+            .budget_home_id = 93
+            .budget_home_name = "US"
+            .local_currency = "USD"
+        End With
+    End With
+End Sub
+Public Sub init_col_deal_statuses()
+    Dim proc_name As String
+    proc_name = "global_vars.init_col_deal_statuses"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim deal_status As Scripting.Dictionary
+    Dim rs As ADODB.Recordset
+    Set rs = utilities.create_adodb_rs(conn, load.sources.menu_lists.deal_statuses)
+    rs.Open
+    
+        Set col_deal_statuses = Nothing
+        With col_deal_statuses
+            Do Until rs.EOF
+                Set deal_status = New Scripting.Dictionary
+                deal_status.Add "id", rs!id.value
+                deal_status.Add "menu_item", rs!menu_item.value
+                .Add deal_status
+                rs.MoveNext
+            Loop
+        End With
+    rs.Close
+    Set rs = Nothing
+    
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
