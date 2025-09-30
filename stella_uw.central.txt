@@ -1,6 +1,94 @@
 Option Compare Database
 Option Explicit
 
+Public Sub open_external_resource_app(ByVal app_name As String)
+    Dim proc_name As String
+    proc_name = "central.open_external_resource_app"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim current_db_name As String
+    Dim open_app As Boolean
+    Dim str_milestone As String
+    Dim str_app_path As String
+    
+    str_milestone = "1"
+    load.check_secondary_access_app
+    str_milestone = "1a"
+    
+    With load.secondary_access_app
+        
+        str_app_path = load.system_info.system_paths.common_path & app_name
+        
+        current_db_name = ""
+        On Error Resume Next
+        current_db_name = .CurrentDb.Name
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        
+        open_app = False
+        If current_db_name = "" Then
+            open_app = True
+        ElseIf current_db_name <> str_app_path Then
+            .CloseCurrentDatabase
+            open_app = True
+        End If
+        
+        If open_app = True Then
+            .OpenCurrentDatabase str_app_path, False
+        End If
+        
+        str_milestone = "4"
+        On Error GoTo err_path
+        .Run "generate_test"
+        .Visible = False
+err_path:
+        If Err.Number = 40351 Then
+            .Visible = True
+            Err.Clear
+            MsgBox "PLEASE READ THIS. Complete the below instructions before moving on." _
+            & vbNewLine & vbNewLine & "We have a small issue which I will need your help to solve." _
+            & vbNewLine & vbNewLine & "Somwehere on your screen, there is a button which says 'enable content'. Please click it." _
+            & vbNewLine & vbNewLine & "You may see it in the top left of your screen. It might appear as a small Access window. If so, just make it larger to show the button." _
+            & vbNewLine & vbNewLine & "If do not see it, look on on your taskbar (the line at the bottom of your screen), for an Access (Stella) window called '" & app_name & "'." _
+            & " Click on it to show the button." _
+            & vbNewLine & vbNewLine & "If you don't see '" & app_name & "', you might need to hover your mouse cursor over the Access (Stella) app on the task bar. Then you'll see 'reports'." _
+            & " Click on it to show the button." _
+            & vbNewLine & vbNewLine & "When you have clicked on 'enable content', click 'ok' below." _
+            , , "Small issue"
+            
+            On Error GoTo err_handler
+            If load.is_debugging = True Then On Error GoTo 0
+        
+            .CloseCurrentDatabase
+            .Visible = False
+            
+            .OpenCurrentDatabase str_app_path, False
+        End If
+        
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+    End With
+    
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = str_milestone
+        .params = "str_sql = " & str_sql
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
 Public Sub budget_home_change(ByVal deal_id As Long, budget_home_id As Long)
     Dim proc_name As String
     proc_name = "central.budget_home_change"
@@ -269,7 +357,7 @@ Public Function generate_program_summary(ByVal deal_id As Variant, format_as_htm
     Dim lead_limit As String
     
     Dim retention As Currency, lead_insurer As String, str_text As String
-    str_sql = "SELECT deal_id, deal_name, primary_insurer_hr, retention FROM " & sources.deals_view & " WHERE deal_id = " & deal_id
+    str_sql = "SELECT deal_id, deal_name, primary_insurer_hr, retention FROM " & load.sources.deals_view & " WHERE deal_id = " & deal_id
     Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
         If IsNull(rs!primary_insurer_hr) = False Then
             lead_insurer = rs!primary_insurer_hr
