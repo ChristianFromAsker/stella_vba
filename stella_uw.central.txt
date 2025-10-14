@@ -1,25 +1,171 @@
 Option Compare Database
 Option Explicit
 
-Public Sub open_external_resource_app(ByVal app_name As String)
+Public Sub backup_deal_tables()
+    Dim proc_name As String
+    proc_name = "central.backup_deal_tables"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim backup_folder_path As String
+    Dim data_points As String
+    Dim deals_t_eur As String
+    Dim deals_t_us As String
+    Dim file_path_eur As String
+    Dim file_path_us As String
+    Dim file_name_eur As String
+    Dim file_name_us As String
+    Dim fileNum As Long
+    Dim i As Integer
+    Dim rs As ADODB.Recordset
+    Dim str_date As String
+    Dim str_sql As String
+    
+    load.check_conn_and_variables
+    
+    data_points = "deal_id, analyst_id, are_emails_filed_id" _
+    & ", broker_firm_id, broker_person, budget_home_id, buyer_business_name, buyer_financial_firm_id, buyer_law_firm_1_id, buyer_law_firm_2_id" _
+    & ", BuyerDomicile" _
+    & ", closing_date, closing_set_received_id, closing_premium_due_date, closing_premium_received_date, ClosingBooked, comments, counsel_fee_amount, counsel_fee_due_date, counsel_fee_received_date" _
+    & ", CounselInvoiceHandled, CounselInvoiceReceived, create_date, creating_uw" _
+    & ", currency_date, currency_date_manual, currency_rate_eurusd, currency_rate_deal, currency_rate_local" _
+    & ", deal_currency, deal_info, deal_name, deal_status_id, drop_end, drop_period" _
+    & ", esg_company, esg_country, expected_signing_text" _
+    & ", ev" _
+    & ", fx_buffer" _
+    & ", inception_date, initial_premium_received, insured_registered_country_id, internal_approver, insured_legal_name, insured_navins_code, internal_approver_at_signing, insured_main_region_id" _
+    & ", is_folder_created, is_locked, is_repeat_buyer, is_test_deal_id, is_underwritten, IsClosed" _
+    & ", key_financials" _
+    & ", latest_status_change, lowest_rp_attpoint" _
+    & ", max_limit_quoted" _
+    & ", nbi_prepper" _
+    & ", policy_period_in_months, primary_insurer, primary_or_xs_id, primary_uw, program_limit" _
+    & ", quote_due_date, quote_due_time"
+    
+    data_points = data_points & ", re_quote_info, retention, risk_feel_id, risk_type_id, rr_done" _
+    & ", sanction_checks_done, secondary_uw, seller_business_name, seller_legal_name, SellerLegalFirm, SellerDomicile, spa_law, spa_signing_date" _
+    & ", signing_invoice_amount, signing_premium_due_date, signing_premium_received_date, SigningBooked, spa_region" _
+    & ", sub_risk_type_id" _
+    & ", submission_date, submission_limits, submission_notes, surplus_broker_firm, surplus_broker_license_no, surplus_broker_person, stage" _
+    & ", target_business_name, target_desc, target_legal_name, target_main_jurisdiction_id, target_super_sector_id, target_sub_sector_id, TargetDomicile" _
+    & ", target_naic_code, target_sic_code" _
+    & ", total_rp_limit_on_deal, total_rp_premium_on_deal, transaction_style" _
+    & ", UltimateBuyer, UltimateSeller, us_producer_no" _
+    & ", uw_fee_amount, uw_fee_due_date, uw_fee_received_date, uw_law_firm_id, uw_progress, uw_progress_latest_change, uw_financial_advisor_id" _
+    & ", UwCounselPerson1, UwCounselPerson2" _
+    & ", vat_home, VDRPassword, VDRReceived" _
+    & ", was_quoted_id, workspace_id"
+    
+    deals_t_eur = "stella_eur.deals_t"
+    deals_t_us = "stella_us.deals_t"
+    str_date = utilities.generate_sql_date(Date)
+    backup_folder_path = load.system_info.system_paths.mysql_backup_path
+    file_name_eur = str_date & "_deals_t_eur.csv"
+    file_name_us = str_date & "_deals_t_us.csv"
+    file_path_eur = backup_folder_path & file_name_eur
+    file_path_us = backup_folder_path & file_name_us
+    fileNum = FreeFile
+    
+    'International
+    If Dir(file_path_eur) = "" Then
+        Open file_path_eur For Output As #fileNum
+        
+        str_sql = "SELECT " & data_points _
+        & " FROM " & deals_t_eur _
+        & " WHERE is_deleted = 0"
+        
+        Set rs = utilities.create_adodb_rs(conn, str_sql)
+        rs.Open
+    
+            'Write headers
+            For i = 0 To rs.Fields.Count - 1
+                If i > 0 Then Print #fileNum, ",";
+                Print #fileNum, rs.Fields(i).Name;
+            Next i
+            Print #fileNum, ""
+    
+            'Write data
+            Do While Not rs.EOF
+                For i = 0 To rs.Fields.Count - 1
+                    If i > 0 Then Print #fileNum, ",";
+                    Print #fileNum, """" & rs.Fields(i).value & """";
+                Next i
+                Print #fileNum, ""
+                rs.MoveNext
+            Loop
+        rs.Close
+        
+        Close #fileNum
+    End If
+    
+    'Americas
+    If Dir(file_path_us) = "" Then
+        Open file_path_us For Output As #fileNum
+        
+        str_sql = "SELECT " & data_points & " FROM " & deals_t_us
+        Set rs = utilities.create_adodb_rs(conn, str_sql)
+        rs.Open
+    
+            'Write headers
+            For i = 0 To rs.Fields.Count - 1
+                If i > 0 Then Print #fileNum, ",";
+                Print #fileNum, rs.Fields(i).Name;
+            Next i
+            Print #fileNum, ""
+    
+            'Write data
+            Do While Not rs.EOF
+                For i = 0 To rs.Fields.Count - 1
+                    If i > 0 Then Print #fileNum, ",";
+                    Print #fileNum, """" & rs.Fields(i).value & """";
+                Next i
+                Print #fileNum, ""
+                rs.MoveNext
+            Loop
+        rs.Close
+        
+        Close #fileNum
+    End If
+    
+outro:
+    Set rs = Nothing
+    Exit Sub
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+Public Sub open_external_resource_app(ByVal app_name As String _
+, need_new_app As Boolean _
+, app_file_path As String)
+
     Dim proc_name As String
     proc_name = "central.open_external_resource_app"
     load.call_stack = load.call_stack & vbNewLine & proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
+    Dim current_app As Access.Application
     Dim current_db_name As String
+    Dim new_app As Access.Application
     Dim open_app As Boolean
     Dim str_milestone As String
     Dim str_app_path As String
     
-    str_milestone = "1"
-    load.check_secondary_access_app
-    str_milestone = "1a"
-    
     With load.secondary_access_app
         
-        str_app_path = load.system_info.system_paths.common_path & app_name
+        str_app_path = app_file_path
         
         current_db_name = ""
         On Error Resume Next
@@ -53,7 +199,7 @@ err_path:
             & vbNewLine & vbNewLine & "You may see it in the top left of your screen. It might appear as a small Access window. If so, just make it larger to show the button." _
             & vbNewLine & vbNewLine & "If do not see it, look on on your taskbar (the line at the bottom of your screen), for an Access (Stella) window called '" & app_name & "'." _
             & " Click on it to show the button." _
-            & vbNewLine & vbNewLine & "If you don't see '" & app_name & "', you might need to hover your mouse cursor over the Access (Stella) app on the task bar. Then you'll see 'reports'." _
+            & vbNewLine & vbNewLine & "If you don't see '" & app_name & "', you might need to hover your mouse cursor over the Access (Stella) app on the task bar. Then you'll see '" & app_name & "'." _
             & " Click on it to show the button." _
             & vbNewLine & vbNewLine & "When you have clicked on 'enable content', click 'ok' below." _
             , , "Small issue"
@@ -147,8 +293,13 @@ err_handler:
     End With
     GoTo outro
 End Sub
-Public Sub deal_status_was_changed(ByVal deal_id As Long, ByVal new_deal_status_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "central.deal_status_was_changed"
+Public Sub deal_status_was_changed(ByVal deal_id As Long _
+, ByVal new_deal_status_id As Long _
+, ByVal update_other_forms As Boolean _
+, ByVal old_deal_status_id As Long)
+    Dim proc_name As String
+    proc_name = "central.deal_status_was_changed"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -159,13 +310,15 @@ Public Sub deal_status_was_changed(ByVal deal_id As Long, ByVal new_deal_status_
     'save new status
     utilities.update_data "deal_status_id", new_deal_status_id, deal_id
        
-    If CurrentProject.AllForms("deal_list_f").IsLoaded = True Then
-        Dim rs As ADODB.Recordset
-        Set rs = utilities.create_adodb_rs(conn, Forms("deal_list_f").RecordSource)
-        rs.Open
-            Set Forms(load.master_deal_list.form_name).Recordset = rs
-        rs.Close
-        Set rs = Nothing
+    If update_other_forms = True Then
+        If CurrentProject.AllForms("deal_list_f").IsLoaded = True Then
+            Dim rs As ADODB.Recordset
+            Set rs = utilities.create_adodb_rs(conn, Forms("deal_list_f").RecordSource)
+            rs.Open
+                Set Forms(load.master_deal_list.form_name).Recordset = rs
+            rs.Close
+            Set rs = Nothing
+        End If
     End If
     
     'log change
@@ -180,12 +333,9 @@ Public Sub deal_status_was_changed(ByVal deal_id As Long, ByVal new_deal_status_
     End With
     Central.data_logger log_object
     Set log_object = Nothing
-    
-    'update currencies
-    Central.update_currencies deal_id
         
     'check if new status is submission, or previous status was NDA. If yes, save current date as submission_date
-    If new_deal_status_id = load.deal_statuses.submission Or load.old_deal_status = load.deal_statuses.NDA Then
+    If new_deal_status_id = load.deal_statuses.submission Or old_deal_status_id = load.deal_statuses.NDA Then
         str_sql = "UPDATE " & load.sources.deals_table & " SET submission_date = '" & utilities.generate_sql_date(Date) & "' WHERE deal_id = " & deal_id
         conn.Execute str_sql
     End If
@@ -208,8 +358,10 @@ Public Sub deal_status_was_changed(ByVal deal_id As Long, ByVal new_deal_status_
     End If
     If str_sql <> "" Then conn.Execute str_sql
     
-    'update message board and move folder if possible
-    Central.folder_check deal_id, new_deal_status_id
+    If utilities.is_old_and_new_deal_status_working(new_deal_status_id, old_deal_status_id) = False Then
+        Central.update_currencies deal_id
+        Central.folder_check deal_id, new_deal_status_id, old_deal_status_id
+    End If
     
     'track latest status changes
     conn.Execute "UPDATE " & load.sources.deals_table & " SET latest_status_change = '" & utilities.generate_sql_date(Date) & "' WHERE deal_id = " & deal_id
@@ -221,7 +373,7 @@ err_handler:
     Dim err_object As cls_err_object
     Set err_object = New cls_err_object
     With err_object
-        .routine_name = "central.deal_status_was_changed"
+        .routine_name = proc_name
         .milestone = ""
         .params = "deal_id = " & deal_id
         .system_error_code = Err.Number
@@ -522,7 +674,9 @@ err_handler:
     
     GoTo outro
 End Sub
-Public Sub folder_check(ByVal deal_id As Long, ByVal new_deal_status_id As Long)
+Public Sub folder_check(ByVal deal_id As Long _
+, ByVal new_deal_status_id As Long _
+, ByVal old_deal_status_id As Long)
     load.call_stack = load.call_stack & vbNewLine & "central.folder_check"
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
@@ -530,54 +684,6 @@ Public Sub folder_check(ByVal deal_id As Long, ByVal new_deal_status_id As Long)
     Dim mandatory_fields As New Collection
     Set mandatory_fields = mandatory_data.check_data(deal_id, load.mandatory_tests.folder_check)
     If mandatory_fields.Count > 0 Then
-        GoTo outro
-    End If
-    
-    'check if target folder location is different between old deal status and new deal status
-    Dim new_deal_status_is_working As Boolean
-    Dim old_deal_status_is_working As Boolean
-    Dim deal_status As Variant
-    Dim deal_status_2 As Variant
-    
-    new_deal_status_is_working = False
-    old_deal_status_is_working = False
-    
-    If load.system_info.app_continent = load.system_info.continents.eurasia Then
-        For Each deal_status In load.col_deal_statuses_working
-            If deal_status = load.old_deal_status Then
-                old_deal_status_is_working = True
-            End If
-            If deal_status = new_deal_status_id Then
-                new_deal_status_is_working = True
-            End If
-        Next deal_status
-    ElseIf load.system_info.app_continent = load.system_info.continents.americas Then
-        For Each deal_status In load.col_deal_statuses_quote_stage
-            If deal_status = load.old_deal_status Then
-                old_deal_status_is_working = True
-            End If
-            If deal_status = new_deal_status_id Then
-                new_deal_status_is_working = True
-            End If
-        Next deal_status
-        
-        If old_deal_status_is_working = False Or new_deal_status_is_working = False Then
-            new_deal_status_is_working = False
-            old_deal_status_is_working = False
-        End If
-        
-        For Each deal_status In load.col_deal_statuses_live
-            If deal_status = load.old_deal_status Then
-                old_deal_status_is_working = True
-            End If
-            If deal_status = new_deal_status_id Then
-                new_deal_status_is_working = True
-            End If
-        Next deal_status
-        
-    End If
-    
-    If old_deal_status_is_working = True And new_deal_status_is_working = True Then
         GoTo outro
     End If
     
@@ -1193,6 +1299,7 @@ Public Sub submission_email()
     uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>deal name &nbsp;</p></TD>"
     uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>underwriter &nbsp;</p></TD>"
     uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>risk type &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>primary or xs &nbsp;</p></TD>"
     uw_table = uw_table & "</TR>"
     
     'table for quoted and declined deals
@@ -1248,9 +1355,12 @@ Public Sub submission_email()
             
             'add data to UW table
             If rs!deal_status_id = 3 Or rs!deal_status_id = 4 Or rs!deal_status_id = 5 Then
-                uw_table = uw_table & "<TR><TD><center> " & rs!deal_name & "</TD>"
-                uw_table = uw_table & "<TD><center> " & rs!primary_uw_hr & "</TD>"
-                uw_table = uw_table & "<TD><center> " & rs!risk_type & "</TD></TR>"
+                uw_table = uw_table & "<TR>" _
+                & "<TD><center> " & rs!deal_name & "</TD>" _
+                & "<TD><center> " & rs!primary_uw_hr & "</TD>" _
+                & "<TD><center> " & rs!risk_type & "</TD>" _
+                & "<TD><center> " & rs!primary_or_xs_hr & "</TD>" _
+                & "</TR>"
             End If
             rs.MoveNext
         Next i
