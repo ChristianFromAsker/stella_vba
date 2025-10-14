@@ -1,0 +1,525 @@
+Option Compare Database
+Option Explicit
+
+Public Function is_old_and_new_deal_status_working(ByVal new_deal_status_id As Long _
+, old_deal_status_id As Long)
+    Dim proc_name As String
+    proc_name = "utilities.is_old_and_new_deal_status_working"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+        
+    Dim output As Boolean
+    Dim deal_status As Variant
+    Dim new_deal_status_is_working As Boolean
+    Dim old_deal_status_is_working As Boolean
+    
+    new_deal_status_is_working = False
+    old_deal_status_is_working = False
+    output = False
+    
+    If load.system_info.app_continent = load.system_info.continents.eurasia Then
+        For Each deal_status In load.col_deal_statuses_working
+            If deal_status = old_deal_status_id Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+    ElseIf load.system_info.app_continent = load.system_info.continents.americas Then
+        For Each deal_status In load.col_deal_statuses_quote_stage
+            If deal_status = old_deal_status_id Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+        
+        '13 October 2025, CK: If deal is moving from one live status to another, no deal_status-related changes are needed. _
+        But might be if moving from a working deal status to a live deal status (e.g. folder moving).
+        If old_deal_status_is_working = False Or new_deal_status_is_working = False Then
+            new_deal_status_is_working = False
+            old_deal_status_is_working = False
+        End If
+        
+        For Each deal_status In load.col_deal_statuses_live
+            If deal_status = old_deal_status_id Then
+                old_deal_status_is_working = True
+            End If
+            If deal_status = new_deal_status_id Then
+                new_deal_status_is_working = True
+            End If
+        Next deal_status
+    End If
+    
+    If old_deal_status_is_working = True And new_deal_status_is_working = True Then
+        output = True
+    End If
+
+    is_old_and_new_deal_status_working = output
+outro:
+    Exit Function
+
+'code to be inserted in err_handler of subs
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Function
+
+Public Sub update_target_sub_sector_list(ByVal target_super_sector_id As Long _
+, ByVal target_sub_sector_field_name As String _
+, ByVal calling_form As String)
+
+    Dim proc_name As String
+    proc_name = "utilities.update_target_sub_sector_list"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    'populate target_sub_sector_id based on update of target_super_sector_id
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+    Dim target_super_setor_id As Long
+    
+    If CurrentProject.AllForms(calling_form).IsLoaded = False Then
+        GoTo outro
+    End If
+    
+    'remove existing items and add new ones
+    With Forms(calling_form).Controls(target_sub_sector_field_name)
+        Do While .ListCount > 0
+            .RemoveItem (0)
+        Loop
+        
+        str_sql = "SELECT sector_id id, sector_name menu_item FROM " & sources.sectors_table _
+        & " WHERE parent_sector_id = " & target_super_sector_id & " ORDER BY sector_name"
+        
+        Set rs = utilities.create_adodb_rs(conn, str_sql)
+        rs.Open
+            Do While rs.EOF = False
+                .AddItem rs!id & ";'" & rs!menu_item & "'"
+                rs.MoveNext
+            Loop
+        rs.Close
+    End With
+
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = "target_sub_sector_field_name = " & target_sub_sector_field_name _
+        & vbNewLine & "target_super_sector_id = " & target_super_sector_id
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+Public Sub update_data(ByVal field_name As String, ByVal data_value As Variant, ByVal deal_id As Long, Optional ByVal dont_make_white As Boolean)
+    'calling routine is always a field in deal_details_f. Rather then implementing call stack in each field, its done here.
+    load.call_stack = "deal_details_f." & field_name & ".AfterUpdate"
+    load.call_stack = load.call_stack & vbNewLine & "utilities.update_data"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    load.check_conn_and_variables
+    
+    If IsNull(data_value) = True Then Exit Sub
+    
+    Dim output_data As String
+    Dim str_sql As String
+    
+    If data_value = "null" Then
+        str_sql = "UPDATE " & sources.deals_table & " SET " & field_name & " = NULL WHERE deal_id = " & deal_id
+    Else
+        output_data = Trim(output_data)
+        output_data = Replace(data_value, "'", "''")
+        str_sql = "UPDATE " & sources.deals_table & " SET " & field_name & " = '" & output_data & "' WHERE deal_id = " & deal_id
+    End If
+    conn.Execute str_sql
+    
+    If CurrentProject.AllForms(load.deal_details.form_name).IsLoaded = True Then
+        'CK: Not all data fields and rs names are the same, but enough for me to ignore this.
+        On Error Resume Next
+        If dont_make_white = True Then
+        Else
+            Forms(load.deal_details.form_name).Controls(field_name).BackColor = colors.white
+        End If
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+    End If
+    
+outro:
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = ""
+        .milestone = "str_sql = " & str_sql
+        .params = "field_name = " & field_name _
+            & ", deal_id = " & deal_id _
+            & ", data_value = " & data_value
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+Public Function generate_buttons_for_deal_list()
+    Dim buttons(20, 4) As Variant
+    '0 = control name
+    '1 = default caption
+    '2 = control type
+    '3 = caption for on
+    '4 = caption for off
+    
+    Dim i As Integer
+    i = 0
+    buttons(i, 0) = 10
+    i = i + 1
+    buttons(i, 0) = "cmdNDA"
+    buttons(i, 1) = "NDA: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "NDA: on"
+    buttons(i, 4) = "NDA: off"
+    i = i + 1
+    buttons(i, 0) = "cmdNBI"
+    buttons(i, 1) = "NBI: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "NBI: on"
+    buttons(i, 4) = "NBI: off"
+    i = i + 1
+    buttons(i, 0) = "cmd_submission"
+    buttons(i, 1) = "Sub: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Sub: on"
+    buttons(i, 4) = "Sub: off"
+    i = i + 1
+    buttons(i, 0) = "cmdPreferred"
+    buttons(i, 1) = "Pref: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Pref: on"
+    buttons(i, 4) = "Pref: off"
+    i = i + 1
+    buttons(i, 0) = "cmdUW"
+    buttons(i, 1) = "UW: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "UW: on"
+    buttons(i, 4) = "UW: off"
+    i = i + 1
+    buttons(i, 0) = "cmdSigned"
+    buttons(i, 1) = "Signed: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Signed: on"
+    buttons(i, 4) = "Singed: off"
+    i = i + 1
+    buttons(i, 0) = "cmd_closed"
+    buttons(i, 1) = "Closed: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Closed: on"
+    buttons(i, 4) = "Closed: off"
+    i = i + 1
+    buttons(i, 0) = "cmdLost"
+    buttons(i, 1) = "Lost: off"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Lost: on"
+    buttons(i, 4) = "Lost: off"
+    i = i + 1
+    buttons(i, 0) = "cmdDeclined"
+    buttons(i, 1) = "Decl: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Decl: on"
+    buttons(i, 4) = "Decl: off"
+    i = i + 1
+    buttons(i, 0) = "cmdCancel"
+    buttons(i, 1) = "Cancel: on"
+    buttons(i, 2) = "status"
+    buttons(i, 3) = "Cancel: on"
+    buttons(i, 4) = "Cancel: off"
+    i = i + 1
+
+    generate_buttons_for_deal_list = buttons
+    
+End Function
+Public Function create_adodb_rs(ByVal conn As ADODB.Connection, ByVal str_sql As String) As ADODB.Recordset
+    load.call_stack = load.call_stack & vbNewLine & "utilities.create_adodb_rs"
+    Dim rs As ADODB.Recordset
+    Set rs = New ADODB.Recordset
+        With rs
+            Set .ActiveConnection = conn
+            .Source = str_sql
+            .LockType = adOpenStatic
+            .CursorType = adLockReadOnly
+            .CursorLocation = adUseClient
+        End With
+    Set create_adodb_rs = rs
+    Set rs = Nothing
+    
+End Function
+Public Function generate_sql_date(ByVal input_date As Date) As String
+    Dim str_day As String, str_month As String
+    If Day(input_date) < 10 Then
+        str_day = "0" & CStr(Day(input_date))
+    Else
+        str_day = CStr(Day(input_date))
+    End If
+    If Month(input_date) < 10 Then
+        str_month = "0" & CStr(Month(input_date))
+    Else
+        str_month = CStr(Month(input_date))
+    End If
+    generate_sql_date = CStr(Year(input_date)) & "-" & str_month & "-" & str_day
+End Function
+Public Function generate_sql_date_2(ByVal input_day As Integer, ByVal input_month As Integer, input_year As Integer) As String
+    Dim str_day As String, str_month As String
+    If input_day < 10 Then
+        str_day = "0" & CStr(input_day)
+    Else
+        str_day = CStr(input_day)
+    End If
+    If input_month < 10 Then
+        str_month = "0" & CStr(input_month)
+    Else
+        str_month = CStr(input_month)
+    End If
+    generate_sql_date_2 = CStr(input_year) & "-" & str_month & "-" & str_day
+End Function
+Public Function date_to_weekday(ByVal input_date As Date) As String
+    Dim i As Integer, week_day As String
+    i = Weekday(input_date)
+    If i = 1 Then
+        week_day = "Sunday"
+    ElseIf i = 2 Then
+        week_day = "Monday"
+    ElseIf i = 3 Then
+        week_day = "Tuesday"
+    ElseIf i = 4 Then
+        week_day = "Wednesday"
+    ElseIf i = 5 Then
+        week_day = "Thursday"
+    ElseIf i = 6 Then
+        week_day = "Friday"
+    ElseIf i = 7 Then
+        week_day = "Saturday"
+    End If
+    date_to_weekday = week_day
+End Function
+Public Function twips_converter(ByVal input_number, ByVal inch_or_cm) As Long
+    If inch_or_cm = "inch" Then
+        twips_converter = input_number * 1440
+    ElseIf inch_or_cm = "cm" Then
+        twips_converter = input_number * 1440 / 2.54
+    Else
+        twips_converter = -1
+    End If
+End Function
+Public Function english_month_name(ByVal month_number As Integer) As String
+    Dim output As String
+    If month_number = 1 Then output = "January"
+    If month_number = 2 Then output = "February"
+    If month_number = 3 Then output = "March"
+    If month_number = 4 Then output = "April"
+    If month_number = 5 Then output = "May"
+    If month_number = 6 Then output = "June"
+    If month_number = 7 Then output = "July"
+    If month_number = 8 Then output = "August"
+    If month_number = 9 Then output = "September"
+    If month_number = 10 Then output = "October"
+    If month_number = 11 Then output = "November"
+    If month_number = 12 Then output = "December"
+    
+    english_month_name = output
+End Function
+Function convert_long_color_to_rgb(color_value As Long) As String
+    Dim Red As Long, Green As Long, Blue As Long
+    Red = color_value Mod 256
+    Green = ((color_value - Red) / 256) Mod 256
+    Blue = ((color_value - Red - (Green * 256)) / 256 / 256) Mod 256
+    
+    convert_long_color_to_rgb = "RGB(" & _
+                    Red & ", " & _
+                    Green & ", " & _
+                    Blue & ")"
+End Function
+Public Function encrypt_string(ByVal input_string As String, ByVal salt_factor As Integer, ByVal offset_factor As Integer) As String
+    Dim temp_output As New Collection, input_collection As New Collection, random_char As String
+    Dim i As Integer
+    For i = 1 To Len(input_string)
+        input_collection.Add Mid(input_string, i, 1)
+    Next i
+    
+    Dim y As Integer, random_chr As Integer
+    For i = 1 To Len(input_string) - 1
+        temp_output.Add ChrW(Asc(input_collection(i)) + offset_factor)
+        For y = 1 To salt_factor
+            random_char = Int(Rnd * (254 - 174))
+            temp_output.Add ChrW(random_char)
+        Next y
+    Next i
+    temp_output.Add Chr(Asc(input_collection(input_collection.Count)) + offset_factor)
+    Dim output_string As String
+    For i = 1 To temp_output.Count
+        output_string = output_string & temp_output(i)
+    Next i
+    encrypt_string = output_string
+outro:
+
+End Function
+Public Function weekday_converter(ByVal input_date As Date) As String
+    Dim int_day As Long
+    int_day = Weekday(input_date, vbSunday)
+    Dim output As String
+    If int_day = 1 Then
+        output = "Sunday"
+    ElseIf int_day = 2 Then
+        output = "Monday"
+    ElseIf int_day = 3 Then
+        output = "Tuesday"
+    ElseIf int_day = 4 Then
+        output = "Wednesday"
+    ElseIf int_day = 5 Then
+        output = "Thursday"
+    ElseIf int_day = 6 Then
+        output = "Friday"
+    ElseIf int_day = 7 Then
+        output = "Saturday"
+    End If
+    weekday_converter = output
+End Function
+
+Public Function decrypt_string(ByVal input_string As String, ByVal salt_factor As Integer, ByVal offset_factor As Integer) As String
+    Dim pw_int As String, i As Integer, pw As String
+    pw_int = pw_int & Mid(input_string, 1, 1)
+    For i = 2 + salt_factor To Len(input_string) Step salt_factor + 1
+        pw_int = pw_int & Mid(input_string, i, 1)
+    Next i
+    Dim int_letter As Integer
+    pw = ""
+    For i = 1 To Len(pw_int)
+        int_letter = Asc(Mid(pw_int, i, 1))
+        pw = pw & ChrW(int_letter - offset_factor)
+    Next i
+    decrypt_string = pw
+outro:
+End Function
+Public Function remove_illegal_characters(ByVal input_string As String) As String
+    Dim str_output As String
+    str_output = input_string
+    str_output = Replace(str_output, "\", "")
+    str_output = Replace(str_output, "/", "")
+    str_output = Replace(str_output, ";", "")
+    str_output = Replace(str_output, ":", "")
+    str_output = Replace(str_output, "%", "")
+    str_output = Replace(str_output, "!", "")
+    str_output = Replace(str_output, "?", "")
+    str_output = Replace(str_output, "'", "")
+    
+    remove_illegal_characters = str_output
+End Function
+
+Public Function get_public_ip()
+    load.call_stack = load.call_stack & vbNewLine & "utilities.get_public_ip"
+    Dim url As String, ip_adr As String
+    With CreateObject("MSXML2.XMLHTTP.6.0")
+        url = "https://checkip.amazonaws.com/"
+        .Open "GET", url, False
+        .Send
+        ip_adr = .responseText
+    Dim reg_exp As Object
+
+    Set reg_exp = CreateObject("vbscript.regexp")
+        If .status = 200 Then
+            With reg_exp
+                .Pattern = "\s"
+                .MultiLine = True
+                .global = True
+                get_public_ip = .Replace(ip_adr, vbNullString)
+            End With
+        Else
+            get_public_ip = "-1"
+        End If
+    End With
+End Function
+
+Public Sub paint_control(ByVal form_name As String, ByVal col_input_controls As Collection)
+    Dim proc_name As String
+    proc_name = "utilities.paint_control_name"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+
+    If CurrentProject.AllForms(form_name).IsLoaded = False Then
+        GoTo outro
+    End If
+    
+    Dim input_control As cls_field
+    For Each input_control In col_input_controls
+        With Forms(form_name).Controls(input_control.field_name)
+            If input_control.field_bg_color <> -1 Then
+                .BackColor = input_control.field_bg_color
+            End If
+            If input_control.field_caption <> "-1" Then
+                .Caption = input_control.field_caption
+            End If
+            If input_control.field_height <> -1 Then
+                .Height = input_control.field_height
+            End If
+            If input_control.field_left <> -1 Then
+                .Left = input_control.field_left
+            End If
+            If input_control.field_top <> -1 Then
+                .Top = input_control.field_top
+            End If
+            If input_control.field_value <> "-1" And input_control.field_type = load.field_type.text_field Then
+                .value = input_control.field_value
+            End If
+            .Visible = input_control.field_visible
+            If input_control.field_width <> -1 Then
+                .Width = input_control.field_width
+            End If
+        End With
+    Next input_control
+    
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = "form_name = " & form_name _
+        & vbNewLine & "input_control.field_name = " & input_control.field_name
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+
+
