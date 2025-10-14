@@ -1296,25 +1296,31 @@ Public Sub submission_email()
     Dim uw_table As String
     ' configure the table
     uw_table = "In underwriting: <br><TABLE width=""60%"" Border=""1"", Cellspacing=""0""><TR>"
-    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>deal name &nbsp;</p></TD>"
-    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>underwriter &nbsp;</p></TD>"
-    uw_table = uw_table & "<TD width=""30%"", Align='Center'><b><p style='font-size:18px'>risk type &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>deal name &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>underwriter &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>analyst &nbsp;</p></TD>"
+    uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>risk type &nbsp;</p></TD>"
     uw_table = uw_table & "<TD width=""20%"", Align='Center'><b><p style='font-size:18px'>primary or xs &nbsp;</p></TD>"
     uw_table = uw_table & "</TR>"
     
     'table for quoted and declined deals
     Dim quoted_declined_table As String
-    quoted_declined_table = "Quoted and declined: <br><TABLE width=""80%"" Border=""1"", Cellspacing=""0""><TR>" ' configure the table
+    quoted_declined_table = "Quoted and declined: <br><TABLE width=""80%"" Border=""1"", Cellspacing=""0""><TR>"
     For i = 0 To UBound(arr_headers)
         quoted_declined_table = quoted_declined_table & "<TD width=" & arr_headers(i, 1) & ", Align='Center'><b><p style='font-size:18px'>" & arr_headers(i, 0) & " &nbsp;</p></TD>"
     Next i
     quoted_declined_table = quoted_declined_table & "</TR>"
-    ' add data to the tables
-    Dim str_sql As String, due_time As String
-    str_sql = Split(Forms!sub_control_f.RecordSource, "ORDER BY")(0) & " ORDER BY due_date, due_time"
+    
+    Dim str_sql As String
+    Dim due_time As String
+    Dim j As Long
+    Dim temp_value As String
     Dim rs As ADODB.Recordset
-    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
-        Dim j As Long, temp_value As String
+    
+    str_sql = Split(Forms!sub_control_f.RecordSource, "ORDER BY")(0) & " ORDER BY due_date, due_time"
+    
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
         For i = 1 To CLng(rs.RecordCount)
             If rs!deal_status_id = 481 Or rs!deal_status_id = 7 Or rs!deal_status_id = 8 Or rs!deal_status_id = 9 Or rs!deal_status_id = 2 Then
                 temp_value = "<TD><center>" & rs!deal_name
@@ -1344,8 +1350,13 @@ Public Sub submission_email()
                     
                 'advisors
                 temp_value = temp_value & "<TD><center> Buy side: " & rs!advisors_hr & "<br> Sell side: " & rs!seller_advisors_hr & "</TD>"
-                temp_value = temp_value & "<TD><center> NBI prepper: " & Nz(rs!nbi_prepper_hr, "not allocated") & "<br> Status: " & rs!status_hr _
-                    & "<br>" & rs!submission_notes & "</TD>"
+                'TE AMENDED THE BELOW
+                
+                temp_value = temp_value & "<TD><center> NBI prepper: " & Nz(rs!nbi_prepper_hr, "not allocated") _
+                & "<br> Analyst: " & Nz(rs!analyst_initials, "not allocated") _
+                & "<br> Status: " & rs!status_hr _
+                & "<br>" & rs!submission_notes & "</TD>"
+                
                 If rs!deal_status_id = 481 Then
                     submission_table = "<TR>" & submission_table & temp_value & "</TR>"
                 ElseIf rs!deal_status_id = 7 Or rs!deal_status_id = 8 Or rs!deal_status_id = 9 Or rs!deal_status_id = 2 Then
@@ -1353,11 +1364,11 @@ Public Sub submission_email()
                 End If
             End If
             
-            'add data to UW table
             If rs!deal_status_id = 3 Or rs!deal_status_id = 4 Or rs!deal_status_id = 5 Then
                 uw_table = uw_table & "<TR>" _
                 & "<TD><center> " & rs!deal_name & "</TD>" _
                 & "<TD><center> " & rs!primary_uw_hr & "</TD>" _
+                & "<TD><center> " & rs!analyst_initials & "</TD>" _
                 & "<TD><center> " & rs!risk_type & "</TD>" _
                 & "<TD><center> " & rs!primary_or_xs_hr & "</TD>" _
                 & "</TR>"
