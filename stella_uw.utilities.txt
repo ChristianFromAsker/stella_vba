@@ -1,5 +1,30 @@
 Option Compare Database
 Option Explicit
+Public Sub call_stack_add_item(ByVal input_proc_name As String)
+    load.call_stack = load.call_stack & vbNewLine & Time & " " & input_proc_name
+End Sub
+Public Sub call_stack_remove_last_item()
+    Dim pos As Long
+    pos = InStrRev(load.call_stack, vbNewLine)
+    If pos > 0 Then load.call_stack = Left(load.call_stack, pos - 1)
+End Sub
+Public Function expand_command(ByVal cmd As ADODB.Command) As String
+    Dim i As Long
+    Dim p As ADODB.Parameter
+    Dim str_sql As String
+    Dim val As String
+
+    str_sql = cmd.CommandText
+    For i = 0 To cmd.Parameters.Count - 1
+        val = cmd.Parameters(i).value
+        If VarType(val) = vbString Then
+            val = "'" & Replace(val, "'", "''") & "'"
+        End If
+        str_sql = Replace(str_sql, "?", val, , 1) ' replace first "?" only
+    Next i
+    
+    expand_command = str_sql
+End Function
 
 Public Function is_old_and_new_deal_status_working(ByVal new_deal_status_id As Long _
 , old_deal_status_id As Long)
@@ -62,7 +87,6 @@ Public Function is_old_and_new_deal_status_working(ByVal new_deal_status_id As L
 outro:
     Exit Function
 
-'code to be inserted in err_handler of subs
 err_handler:
     Dim err_object As cls_err_object
     Set err_object = New cls_err_object
@@ -135,11 +159,13 @@ err_handler:
     GoTo outro
 End Sub
 Public Sub update_data(ByVal field_name As String, ByVal data_value As Variant, ByVal deal_id As Long, Optional ByVal dont_make_white As Boolean)
+    Const proc_name As String = "utilities.update_data"
     'calling routine is always a field in deal_details_f. Rather then implementing call stack in each field, its done here.
-    load.call_stack = "deal_details_f." & field_name & ".AfterUpdate"
-    load.call_stack = load.call_stack & vbNewLine & "utilities.update_data"
+    utilities.call_stack_add_item "deal_details_f." & field_name & ".AfterUpdate"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
+    
     load.check_conn_and_variables
     
     If IsNull(data_value) = True Then Exit Sub
@@ -168,9 +194,11 @@ Public Sub update_data(ByVal field_name As String, ByVal data_value As Variant, 
     End If
     
 outro:
+    utilities.call_stack_remove_last_item
     Exit Sub
     
 err_handler:
+    
     Dim err_object As cls_err_object
     Set err_object = New cls_err_object
     With err_object
@@ -264,7 +292,12 @@ Public Function generate_buttons_for_deal_list()
     
 End Function
 Public Function create_adodb_rs(ByVal conn As ADODB.Connection, ByVal str_sql As String) As ADODB.Recordset
+    Const proc_name As String = "create_adodb_rs"
+    utilities.call_stack_add_item proc_name
     load.call_stack = load.call_stack & vbNewLine & "utilities.create_adodb_rs"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim rs As ADODB.Recordset
     Set rs = New ADODB.Recordset
         With rs
@@ -276,7 +309,13 @@ Public Function create_adodb_rs(ByVal conn As ADODB.Connection, ByVal str_sql As
         End With
     Set create_adodb_rs = rs
     Set rs = Nothing
-    
+        
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Function
+err_handler:
+    Debug.Print
+    Resume outro
 End Function
 Public Function generate_sql_date(ByVal input_date As Date) As String
     Dim str_day As String, str_month As String
