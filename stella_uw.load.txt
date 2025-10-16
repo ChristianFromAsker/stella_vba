@@ -1,0 +1,914 @@
+Option Compare Database
+Option Explicit
+
+Public Enum menu_list
+    no = 94
+    yes = 93
+    xs_only = 440
+End Enum
+
+'These variables must load first, in this sequence.
+'system and regional settings
+Public Type typ_field_type
+    cmd_button As String
+    label As String
+    text_field As String
+    header As String
+End Type
+Public field_type As load.typ_field_type
+
+Public Type typ_form_names
+    add_many_deals_f As String
+    deal_details_f As String
+    master_deal_list_f As String
+    my_deals_f As String
+    sub_control_f As String
+    uw_positions_f As String
+    web_search_f As String
+    working_on_it_f As String
+    weekly_view_f As String
+End Type
+Public form_names As load.typ_form_names
+
+Public Type typ_mandatory_tests
+    folder_check As Variant
+    imanage_check As Variant
+    nda_check As Variant
+    non_bound_check As Variant
+    open_cm As Variant
+    quote_check As Variant
+    signing_check As Variant
+    closing_check As Variant
+    update_currencies As Variant
+    web_searches As String
+End Type
+Public mandatory_tests As load.typ_mandatory_tests
+    
+Public sources As New cls_sources
+Public system_info As New cls_system_info
+Public conn As New ADODB.Connection
+
+'objects
+Public colors As New cls_colors
+Public form_backgrounds As New cls_images
+Public current_uw As New cls_underwriter
+Public service_message_area As New cls_service_message_area
+Public kpi_dashboard As New cls_kpi_dashboard
+
+'forms
+Public deal_details As New cls_form_deal_details
+Public main_menu As New cls_form_main_menu
+Public master_deal_list As New cls_form_master_deal_list
+Public add_many_deals As New cls_form_add_many
+Public policies As New cls_form_policies
+Public deal_tags As New cls_deal_tags
+
+'non-object variables
+Public array_law_firms() As Variant
+Public broker_firm_array() As Variant
+Public country_list() As Variant
+Public yes_no_array() As Variant
+Public is_debugging As Boolean
+Public is_init As Boolean
+Public print_milestones As Boolean
+Public str_sql As String
+Public underwriters() As Variant
+Public i As Long, y As Long, x As Long
+
+'stella_common.menu_list_t constants
+Public Const stella As Integer = 56
+Public Const super_sector = 494
+Public Const sub_sector = 495
+
+Private Type typ_control_list_properties
+    field_name As Integer
+    is_mandatory As Integer
+    set_bg_to_white As Integer
+    field_in_recordset As Integer
+    empty_value As Integer
+    control_object As Integer
+End Type
+Public control_list_propertes As typ_control_list_properties
+
+'entity constants
+Public Const rp_norway As Integer = 77
+Public Const rp_sweden As Integer = 78
+Public Const rp_finland As Integer = 82
+Public Const rp_denmark As Integer = 76
+Public Const rp_uk As Integer = 81
+
+Public Enum deal_statuses
+    NDA = 1
+    nbi = 2
+    submission = 481
+    preferred = 3
+    expensed = 4
+    uw = 5
+    signed = 6
+    closed = 436
+    declined = 7
+    cancelled = 8
+    lost = 9
+    Collapsed = 485
+End Enum
+Public col_deal_statuses_working As New Collection
+Public col_deal_statuses_quote_stage As New Collection
+Public col_deal_statuses_live As New Collection
+
+'other constants
+Public Const nordic_rp_entity As Integer = -2 ' this does not exist in the database
+Public Const sub_sector_all As Integer = 111
+Public Type typ_menu_lists
+    layer_types As String
+End Type
+Public menu_lists As typ_menu_lists
+
+'other global variables
+Public col_all_forms As New Collection
+Public stella_is_closing As Boolean
+Public secondary_access_app As Access.Application
+Public cm_app As Access.Application
+Public excel_app As Excel.Application
+Public call_stack As String
+Public rs_count As Integer
+
+'global list
+Private Type typ_global_field_properties
+    default_value As String
+    field_name_in_deal_details_f As String
+    field_name_in_risk_details_v As String
+    mandatory_for_capacity_email_us As String
+    active_in_america As String
+    active_in_eurasia As String
+End Type
+Public global_field_properties As typ_global_field_properties
+Public global_field_list As New Collection
+
+Public Sub refresh_stella_uw()
+    Const proc_name As String = "load.refresh_stella_uw"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    load.system_info.init_system_info
+    load.init_conn
+    load.sources.init
+    load.init_global_variables
+    load.colors.init
+    load.deal_details.shall_be_refreshed = True
+    load.master_deal_list.shall_be_refreshed = True
+    load.add_many_deals.shall_be_refreshed = True
+    
+    If CurrentProject.AllForms(load.form_names.deal_details_f).IsLoaded = True Then DoCmd.Close acForm, load.form_names.deal_details_f
+    If CurrentProject.AllForms(load.form_names.master_deal_list_f).IsLoaded = True Then DoCmd.Close acForm, load.form_names.master_deal_list_f
+    If CurrentProject.AllForms(load.form_names.my_deals_f).IsLoaded = True Then DoCmd.Close acForm, load.form_names.my_deals_f
+    If CurrentProject.AllForms(load.form_names.sub_control_f).IsLoaded = True Then DoCmd.Close acForm, load.form_names.sub_control_f
+    If CurrentProject.AllForms(load.add_many_deals.form_name).IsLoaded = True Then DoCmd.Close acForm, load.add_many_deals.form_name
+    
+    With load.main_menu
+        .refresh_main_menu
+        .update_deal_statuses_for_search
+        .paint_main_menu
+    End With
+    
+    'populate service messages
+    With load.service_message_area
+        .init
+        .populate_messages
+        .place_boxes
+    End With
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+End Sub
+Public Sub start_stella_uw()
+    Const proc_name As String = "load.start_stella_uw"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If is_debugging = True Then On Error GoTo 0
+    
+    'minimize access window
+    If load.is_debugging = False Then
+        windows_apis.AccessMoveSize 0, 0, 300, 75
+    End If
+    
+    'load key system data, required for making the MySQL connection
+    load.init_conn
+    load.init_global_variables
+    load.check_stella_version
+    
+    open_forms.main_menu_f
+        
+    'for now, only deals with continent chooser (i.e. America or EurAsia). Main menu must be loaded for it to run.
+    With load.main_menu
+        .refresh_main_menu
+    End With
+    
+    'populate service messages. Main Menu must be loaded for it to run
+    With load.service_message_area
+        .init
+        .populate_messages
+        .place_boxes
+    End With
+    
+    'open my deals if relevant
+    If load.system_info.app_continent = load.system_info.continents.eurasia Then
+        open_forms.my_deals_f ""
+    End If
+    
+    Dim str_sql As String
+    str_sql = "INSERT INTO " & load.sources.log_activity_table _
+    & " (activity, activity_source, user_name, app_name, app_continent, user_ip) VALUES " _
+    & "('opened stella_uw'" _
+    & ", '" & proc_name & "'" _
+    & ", '" & Environ("username") & "'" _
+    & ", ' " & load.system_info.app_name & "'" _
+    & ", '" & load.system_info.app_continent & "'" _
+    & ", '" & load.system_info.ip_current & "')"
+    conn.Execute str_sql
+    
+    If load.current_uw.is_dev = True Then
+        Central.backup_deal_tables
+    End If
+    
+outro:
+    open_forms.working_on_it_f__close
+    utilities.call_stack_remove_last_item
+    Exit Sub
+    
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+
+End Sub
+Public Sub init_global_variables()
+    Const proc_name As String = "load.init_global_variables"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If is_debugging = True Then On Error GoTo 0
+    
+    load.is_init = True
+    
+    Dim str_milestone As String
+    str_milestone = "after intro"
+    
+    If load.system_info.is_init = False Then load.system_info.init_system_info
+    
+    load.sources.init
+    global_vars.init
+    
+    Set load.col_deal_statuses_working = Nothing
+    With load.col_deal_statuses_working
+        .Add deal_statuses.NDA
+        .Add deal_statuses.submission
+        .Add deal_statuses.nbi
+        .Add deal_statuses.preferred
+        .Add deal_statuses.expensed
+        .Add deal_statuses.uw
+    End With
+    
+    Set load.col_deal_statuses_quote_stage = Nothing
+    With load.col_deal_statuses_quote_stage
+        .Add deal_statuses.NDA
+        .Add deal_statuses.submission
+        .Add deal_statuses.nbi
+    End With
+    
+    Set load.col_deal_statuses_live = Nothing
+    With load.col_deal_statuses_live
+        .Add deal_statuses.preferred
+        .Add deal_statuses.expensed
+        .Add deal_statuses.uw
+    End With
+    
+    'need load.conn
+    load.init_array_underwriters
+    str_milestone = "after load.init_array_underwriters"
+    load.current_uw.init_uw
+    str_milestone = "after load.current_uw.init_uw"
+    load.init_array_law_firms
+    str_milestone = "after load.init_array_law_firms"
+    load.init_country_list_array
+    str_milestone = "after load.init_country_list_array"
+    load.init_broker_firm_array
+    str_milestone = "after load.init_broker_firm_array"
+    load.init_yes_no_array
+    
+    With load.form_names
+        .add_many_deals_f = "add_many_deals_f"
+        .deal_details_f = "deal_details_f"
+        .master_deal_list_f = "deal_list_f"
+        .my_deals_f = "my_deals_f"
+        .sub_control_f = "sub_control_f"
+        .uw_positions_f = "uw_positions_f"
+        .web_search_f = "web_search_f"
+        .working_on_it_f = "working_on_it_f"
+    End With
+    
+    global_vars.init_conn_required
+    
+    load.deal_details.init 0
+    load.main_menu.init
+    load.main_menu.debugging_buttons
+    str_milestone = "after load.main_menu.init"
+    load.master_deal_list.init
+    str_milestone = "after load.master_deal_list.init"
+    load.add_many_deals.init
+    load.policies.init
+    
+    With load.field_type
+        .cmd_button = "command_button"
+        .header = "header"
+        .label = "label"
+        .text_field = "text_field"
+    End With
+    
+    With load.control_list_propertes
+        .field_name = 0
+        .is_mandatory = 1
+        .set_bg_to_white = 2
+        .field_in_recordset = 3
+        .empty_value = 4
+        .control_object = 5
+    End With
+    
+    'load global field list
+    With load.global_field_properties
+        .active_in_america = "active_in_america"
+        .active_in_eurasia = "active_in_eurasia"
+        .default_value = "default_value"
+        .field_name_in_deal_details_f = "field_name_in_deal_details_f"
+        .field_name_in_risk_details_v = "field_name_in_risk_details_v"
+        .mandatory_for_capacity_email_us = "mandatory_for_capacity_email_us"
+    End With
+    global_field_list_m.init_field_list
+    
+    With load.mandatory_tests
+        .folder_check = "folder_check"
+        .imanage_check = "imanage_check"
+        .nda_check = "nda_check"
+        .non_bound_check = "non_bound_check"
+        .open_cm = 1
+        .quote_check = 5
+        .signing_check = 3
+        .update_currencies = 4
+        .web_searches = "web_search"
+    End With
+    
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+End Sub
+Public Sub check_cm_access_app()
+    Const proc_name As String = "load.check_cm_access_app"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    'create access app for standby.
+    
+    Dim init_secondary_database As Boolean
+    Dim secondary_app_name As String
+    
+    init_secondary_database = False
+    If load.cm_app Is Nothing Then
+        init_secondary_database = True
+    Else
+        'even if the app object exists, the actual app might be closed due to external influence.
+        'Therefore, need to check if the app is available via a try-catch solution
+        secondary_app_name = ""
+        On Error Resume Next
+            secondary_app_name = load.cm_app.CurrentDb.Name
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        If secondary_app_name = "" Then
+            init_secondary_database = True
+        End If
+    End If
+    If init_secondary_database = True Then
+        Set load.cm_app = CreateObject("Access.Application")
+        With load.cm_app
+            .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder_cm.accdb", False
+            .Visible = False
+        End With
+    End If
+
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+End Sub
+
+Public Sub check_secondary_access_app()
+    Const proc_name As String = "check_secondary_access_app"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim init_secondary_database As Boolean
+    Dim secondary_app_name As String
+    Dim str_milestone As String
+    
+    init_secondary_database = False
+    str_milestone = "Before If load.secondary_access_app Is Nothing Then"
+    If load.secondary_access_app Is Nothing Then
+        init_secondary_database = True
+    Else
+        'even if the app object exists, the actual app might be closed due to external influence.
+        'Therefore, need to check if the app is available via a try-catch solution
+        secondary_app_name = ""
+        On Error Resume Next
+            secondary_app_name = load.secondary_access_app.CurrentDb.Name
+        On Error GoTo err_handler
+        If load.is_debugging = True Then On Error GoTo 0
+        If secondary_app_name = "" Then
+            init_secondary_database = True
+        End If
+    End If
+    
+    str_milestone = "Before If init_secondary_database = True Then"
+    If init_secondary_database = True Then
+        
+        str_milestone = "10"
+        Set load.secondary_access_app = CreateObject("Access.Application")
+        
+        With load.secondary_access_app
+            str_milestone = "4"
+            '9 September 2025, CK: I'm cehcking if maybe I don't need a placeholder DB to be opened. _
+            UPDATE: This is required, because the only way to check if the secondary app is open is to check _
+            load.secondary_access_app.CurrentDb.Name
+            .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
+            str_milestone = "5"
+            .Visible = False
+        End With
+        
+    End If
+
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, str_milestone, "", "", True
+    GoTo outro
+End Sub
+Public Sub exit_stella_uw()
+    Const proc_name As String = "load.exit_stella_uw"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    If Not load.colors Is Nothing Then Set load.colors = Nothing
+    If Not load.current_uw Is Nothing Then Set load.current_uw = Nothing
+    If Not sources Is Nothing Then Set sources = Nothing
+    If Not load.system_info Is Nothing Then Set load.system_info = Nothing
+    If Not service_message_area Is Nothing Then Set service_message_area = Nothing
+    If Not kpi_dashboard Is Nothing Then Set kpi_dashboard = Nothing
+    If Not load.main_menu Is Nothing Then Set load.main_menu = Nothing
+    If Not load.secondary_access_app Is Nothing Then
+        load.secondary_access_app.Quit
+        Set load.secondary_access_app = Nothing
+    End If
+    If Not conn Is Nothing Then
+        If conn.State = 1 Then conn.Close
+        Set conn = Nothing
+    End If
+    
+    Dim form_field As cls_field
+    For Each form_field In load.deal_details.col_all_labels
+        Set form_field = Nothing
+    Next form_field
+    For Each form_field In load.deal_details.col_all_text_fields
+        Set form_field = Nothing
+    Next form_field
+    
+    '31 December 2024, CK: This slows down closing of Stella and I suspect may be corrupting files every now and then.
+    If Environ("username") = "christian.kartnes" Then
+        load.remove_images_from_access_file
+    End If
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Resume outro
+End Sub
+Public Sub init_array_underwriters()
+    Const proc_name As String = "load.init_array_underwriters"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim i As Integer
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+        
+    str_sql = "SELECT uw_id" _
+    & ", can_change_budget_home_id" _
+    & ", budget_continent, budget_continent_id" _
+    & ", budget_home, budget_home_id, budget_region, budget_region_id" _
+    & ", can_change_budget_home_id" _
+    & ", has_admin_access_id" _
+    & ", is_dev_id" _
+    & ", user_name, uw_initials, uw_name, nickname" _
+    & " FROM " & load.sources.underwriters_view _
+    & " ORDER BY uw_initials"
+    
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    With rs
+        .Open
+        ReDim underwriters(0 To CLng(rs.RecordCount), 0 To 16)
+        underwriters(0, 0) = CLng(rs.RecordCount)
+        i = 1
+        Do Until .EOF = True
+            underwriters(i, 1) = !uw_id
+            underwriters(i, 2) = !uw_initials
+            underwriters(i, 3) = !uw_name
+            underwriters(i, 4) = !user_name
+            underwriters(i, 5) = !has_admin_access_id
+            underwriters(i, 6) = Nz(!budget_home, -1)
+            underwriters(i, 7) = Nz(!budget_home_id, -1)
+            underwriters(i, 8) = Nz(!budget_region, -1)
+            underwriters(i, 9) = Nz(!budget_region_id, -1)
+            underwriters(i, 10) = Nz(!NickName, !uw_name)
+            underwriters(i, 11) = Nz(!budget_continent, -1)
+            underwriters(i, 12) = Nz(!budget_continent_id, -1)
+            underwriters(i, 13) = Nz(!can_change_budget_home_id, -1)
+            underwriters(i, 14) = Nz(!is_dev_id, -1)
+
+            i = i + 1
+            rs.MoveNext
+        Loop
+        .Close
+    End With
+    Set rs = Nothing
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+End Sub
+Public Sub init_array_law_firms()
+    load.call_stack = load.call_stack & vbNewLine & "load.init_array_law_firm"
+    'Assing value to current underwriter array
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    
+    str_sql = "SELECT law_firm_id, firm_name, is_counsel" _
+    & " FROM " & load.sources.law_firms_view & " ORDER BY firm_name"
+    
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        ReDim array_law_firms(0 To CLng(rs.RecordCount), 0 To 2)
+        i = 1
+        Do Until rs.EOF = True
+            array_law_firms(i, 0) = rs!law_firm_id
+            array_law_firms(i, 1) = rs!firm_name
+            array_law_firms(i, 2) = Nz(rs!is_counsel, 94)
+            
+            i = i + 1
+            rs.MoveNext
+        Loop
+        array_law_firms(0, 0) = CLng(rs.RecordCount)
+    rs.Close
+    Set rs = Nothing
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+End Sub
+Public Sub init_broker_firm_array()
+    load.call_stack = load.call_stack & vbNewLine & "load.init_broker_firm_array"
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    
+    str_sql = "SELECT broker_firm_id, business_name, legal_name FROM " & load.sources.broker_firms_view & " ORDER BY business_name"
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        ReDim broker_firm_array(1 To CLng(rs.RecordCount), 0 To 2)
+        i = 1
+        Do Until rs.EOF = True
+            broker_firm_array(i, 0) = rs!broker_firm_id
+            broker_firm_array(i, 1) = rs!business_name
+            broker_firm_array(i, 2) = rs!legal_name
+            i = i + 1
+            rs.MoveNext
+        Loop
+    rs.Close
+    Set rs = Nothing
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+End Sub
+Public Sub init_yes_no_array()
+    load.call_stack = load.call_stack & vbNewLine & "load.init_yes_no_array"
+    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    
+    str_sql = "SELECT menu_id, menu_item FROM " & load.sources.menu_list_table & " WHERE item_type = 'YesNo'"
+    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+        ReDim yes_no_array(1 To CLng(rs.RecordCount), 0 To 1)
+        i = 1
+        Do Until rs.EOF = True
+            yes_no_array(i, 0) = rs!menu_id
+            yes_no_array(i, 1) = rs!menu_item
+            i = i + 1
+            rs.MoveNext
+        Loop
+    rs.Close
+    Set rs = Nothing
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+End Sub
+Public Sub check_stella_version()
+    On Error GoTo err_handler
+    If is_debugging = True Then On Error GoTo 0
+    
+    If CurrentProject.Path & "\" = load.system_info.system_paths.stable_builds Then
+        MsgBox "You are opening the wrong version of Stella. Please reach out to Tom or Christian." & vbNewLine & vbNewLine & "Stella will now close." _
+            , , "Wrong version of Stella"
+        load.stella_is_closing = True
+        DoCmd.Close acForm, "load_f"
+        DoCmd.Quit
+    End If
+    
+    On Error GoTo err_handler
+    If is_debugging = True Then On Error GoTo 0
+    
+    Dim str_username As String
+    If Right(CurrentProject.Path, 6) <> "system" And Right(CurrentProject.Path, 10) <> "individual" Then
+        MsgBox "You are not using the correct version of Stella. Please reach out to Tom, Christian or someone at the team." _
+            & vbNewLine & vbNewLine & "Please go here: " _
+            & vbNewLine & load.system_info.system_paths.loader_path _
+            , , "Wrong version of Stella"
+        
+        '1 September 2025, CK: "chris" is CK's username on his local computer.
+        str_username = Environ("username")
+        If str_username <> "christian.kartnes" _
+        And str_username <> "tom.evans" _
+        And str_username <> "chris" Then
+            DoCmd.Quit
+        End If
+    End If
+    
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "load.check_stella_version"
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = False
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+Public Sub init_conn()
+    load.call_stack = load.call_stack & vbNewLine & "load.init_conn"
+    Dim database_name As String
+    Dim encryption_key As Long
+    Dim ip_address As String
+    Dim server_name As String
+    Dim user_name As String
+    Dim pwd As String
+    
+    If load.system_info.is_init = False Then
+        load.system_info.init_system_info
+        load.main_menu.paint_main_menu
+        load.main_menu.refresh_main_menu
+    End If
+    
+    'default values
+    database_name = load.system_info.database_name
+    encryption_key = 33
+    ip_address = "mysql01-weu-prd.rpgroup.com"
+    server_name = "public_avd_db"
+    user_name = "stella"
+    
+    'get password
+    Dim pw_file As Integer
+    pw_file = FreeFile
+    Dim file_path As String
+    file_path = load.system_info.system_paths.pws & "\" & server_name & ".txt"
+    Dim encrypted_string As String
+    Open file_path For Input As FreeFile
+        encrypted_string = Input(LOF(pw_file), pw_file)
+        pwd = CStr(utilities.decrypt_string(encrypted_string, Left(encryption_key, 1), Right(encryption_key, 1)))
+    Close pw_file
+    
+    'reset connection
+    If Not load.conn Is Nothing Then Set load.conn = Nothing
+    
+    'activate connection
+    Dim str_conn As String
+
+'1 September 2025, CK: We are moving to a new driver. This can be removed when done.
+    On Error GoTo new_driver
+    str_conn = "Driver={MySQL ODBC 8.0 Unicode Driver};" _
+        & "Server=" & ip_address & ";" _
+        & "DATABASE=" & database_name & ";" _
+        & "UID=" & user_name & ";" _
+        & "PWD=" & pwd
+    Set load.conn = New ADODB.Connection
+    
+    With conn
+        .ConnectionString = str_conn
+        .Open
+        .CursorLocation = adUseClient
+    End With
+    
+    GoTo outro
+    
+new_driver:
+'end remove
+
+    str_conn = "Driver={MySQL ODBC 9.4 Unicode Driver};" _
+        & "Server=" & ip_address & ";" _
+        & "DATABASE=" & database_name & ";" _
+        & "UID=" & user_name & ";" _
+        & "PWD=" & pwd
+    Set load.conn = New ADODB.Connection
+    
+    With conn
+        .ConnectionString = str_conn
+        .Open
+        .CursorLocation = adUseClient
+    End With
+    
+    GoTo outro
+    
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+End Sub
+Public Sub init_country_list_array()
+    Dim proc_name As String
+    proc_name = "load.init_country_list_array"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim i As Integer
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+    
+    str_sql = "SELECT jurisdiction_id, jurisdiction FROM " & sources.jurisdictions_view & " WHERE jurisdiction_type = 'country' ORDER BY jurisdiction"
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
+        i = 1
+        ReDim country_list(0 To CLng(rs.RecordCount), 0 To 1)
+        Do Until rs.EOF
+            country_list(i, 0) = rs!jurisdiction_id
+            country_list(i, 1) = rs!jurisdiction
+            i = i + 1
+            rs.MoveNext
+        Loop
+        country_list(0, 0) = i - 1
+    rs.Close
+    
+outro:
+    If Not rs Is Nothing Then
+        Set rs = Nothing
+    End If
+    utilities.call_stack_remove_last_item
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+End Sub
+Public Sub check_connection()
+    load.call_stack = load.call_stack & vbNewLine & "load.check_connection"
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    If conn Is Nothing Then load.init_conn
+    
+    'connections often drops while conn.state remain 1. The .close and .open seems to fix that.
+    If conn.State <> adStateClosed Then
+        conn.Close
+    End If
+    On Error GoTo conn_fix
+    conn.Open
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+    
+conn_fix:
+    Debug.Print Time & " conn.open failed and was reinitialised"
+    If load.system_info.is_init = False Then load.system_info.init_system_info
+    load.init_conn
+    Resume Next
+    
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = "load.check_connections"
+        .milestone = "n/a"
+        .params = "n/a"
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .send_error err_object
+    End With
+    
+    MsgBox load.system_info.error_instruction & vbNewLine & vbNewLine _
+    & "Error number: " & Err.Number & vbNewLine _
+    & "Error description: " & Err.Description & vbNewLine _
+    & "Where: load.cgeck_conn" & vbNewLine _
+    & "Parameters: n/a " & vbNewLine _
+    & "App: " & load.system_info.app_name, , load.system_info.error_msg_heading
+    
+    Err.Clear
+    
+    GoTo outro
+    
+End Sub
+
+Public Sub check_conn_and_variables()
+    Const proc_name As String = "load.check_conn_and_variables"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+        
+    load.check_connection
+    
+    If load.is_init = False Then
+        load.init_global_variables
+        load.main_menu.refresh_main_menu
+        load.main_menu.paint_main_menu
+        load.master_deal_list.init
+        load.master_deal_list.paint_master_deal_list
+    End If
+    
+    'populate service messages
+    With load.service_message_area
+        .init
+        .populate_messages
+        .place_boxes
+    End With
+    
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", False
+    Resume outro
+End Sub
+
+Public Sub remove_images_from_access_file()
+    Const proc_name As String = "load.remove_images_from_access_file"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    'Stella adds images when loading. The images vary with seasons etc.
+    'Access saves a new version of the image every time Stella is opened. Hence, the file bloats. This sub removes the bloat, as long as the database is set to 'compact on close'.
+    
+    Dim rs As DAO.Recordset
+    Dim str_sql As String
+    str_sql = "SELECT * FROM MSysResources ORDER BY Id"
+    Set rs = CurrentDb.OpenRecordset(str_sql)
+    With rs
+        .OpenRecordset
+        Do Until .EOF
+            If InStr(1, rs!Name, "main_menu") Then
+                .delete
+            End If
+            .MoveNext
+        Loop
+        .Close
+    End With
+    Set rs = Nothing
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
+End Sub
+
+
+
