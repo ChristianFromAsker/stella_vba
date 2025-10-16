@@ -1,10 +1,97 @@
 Option Compare Database
 Option Explicit
 
+Public Sub err_handler(ByVal input_proc_name As String _
+, vba_err_no As Long _
+, vba_err_desc As String _
+, str_milestone As String _
+, str_params As String _
+, stella_err_desc As String _
+, show_err As Boolean)
+    Const proc_name As String = "central.err_handler"
+    utilities.call_stack_add_item proc_name
+    On Error Resume Next
+    
+    Dim cmd As ADODB.Command
+    Dim app_name As String
+    Dim app_continent As String
+    
+    If load.is_debugging = True Then
+        GoTo outro
+    End If
+    
+    app_name = "-1"
+    app_name = load.system_info.app_name
+    app_continent = "-1"
+    app_continent = load.system_info.app_continent
+    
+    Set cmd = New ADODB.Command
+
+    With cmd
+        .ActiveConnection = load.conn
+        
+        .CommandText = "INSERT INTO log_errors_t " & _
+        "(system_error_text, system_error_code, stella_error_text, routine_name, call_stack, params, milestone, uw_name, app_name, file_path, app_continent) " & _
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        
+        .CommandType = adCmdText
+
+        ' Append parameters in the same order as the placeholders
+        .Parameters.Append .CreateParameter("pSystemErrorText", adVarWChar, adParamInput, 255, vba_err_desc)
+        .Parameters.Append .CreateParameter("pSystemErrorCode", adInteger, adParamInput, , vba_err_no)
+        .Parameters.Append .CreateParameter("pStellaErrorText", adVarWChar, adParamInput, 255, stella_err_desc)
+        .Parameters.Append .CreateParameter("pRoutineName", adVarWChar, adParamInput, 255, input_proc_name)
+        .Parameters.Append .CreateParameter("pCallStack", adLongVarWChar, adParamInput, -1, load.call_stack)
+        .Parameters.Append .CreateParameter("pParams", adVarWChar, adParamInput, 255, str_params)
+        .Parameters.Append .CreateParameter("pMilestone", adVarWChar, adParamInput, 255, str_milestone)
+        .Parameters.Append .CreateParameter("pUwName", adVarWChar, adParamInput, 255, Environ("Username"))
+        .Parameters.Append .CreateParameter("pAppName", adVarWChar, adParamInput, 255, load.system_info.app_name)
+        .Parameters.Append .CreateParameter("pFilePath", adVarWChar, adParamInput, 255, CurrentProject.FullName)
+        .Parameters.Append .CreateParameter("pAppContinent", adVarWChar, adParamInput, 255, load.system_info.app_continent)
+        .Execute
+    End With
+
+    Set cmd = Nothing
+    
+    Err.Clear
+    
+    '16 October 2025, CK: I don't think the below is require anymore. _
+    However, due to recent issues with this in the US, I am leaving it for now in case it is needed. But to be removed next time I read this :)
+    
+    'fix secondary access app
+    With load.secondary_access_app
+        '2 September 2025, CK: It seems that sometimes, these scripts do not close as they should. _
+        As this entire routine is wrapped inside a "On Error Resume Next", what I am doing is opening both _
+        scripts and then closing them. The open will fail if the file is already open, but that is okay, as _
+        the .CloseCurrentDatabase will succeed.
+
+        .OpenCurrentDatabase load.system_info.system_paths.scripts_path_secondary
+        .CloseCurrentDatabase
+        .OpenCurrentDatabase load.system_info.system_paths.scripts_path
+        .CloseCurrentDatabase
+        .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
+    End With
+    
+    If show_err = True Then
+        MsgBox load.system_info.error_instruction & vbNewLine & vbNewLine _
+        & "Error description: " & vba_err_desc & vbNewLine _
+        & "Where: " & input_proc_name & vbNewLine _
+        & "Parameters: " & str_params & vbNewLine _
+        & "App: " & load.system_info.app_name _
+        & vbNewLine & "Call stack: " & Right(call_stack, 500) _
+        , , load.system_info.error_msg_heading
+    End If
+
+outro:
+    utilities.call_stack_remove_last_item
+    Exit Sub
+err_handler:
+    Debug.Print "Error in " & proc_name & " - err.number: " & Err.Number & " - err.description: " & Err.Description
+    Resume outro
+End Sub
 Public Sub backup_deal_tables()
-    Dim proc_name As String
-    proc_name = "central.backup_deal_tables"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name = "central.backup_deal_tables"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -20,8 +107,10 @@ Public Sub backup_deal_tables()
     Dim i As Integer
     Dim rs As ADODB.Recordset
     Dim str_date As String
+    Dim str_milestone As String
     Dim str_sql As String
     
+    str_milestone = "Before test error"
     load.check_conn_and_variables
     
     data_points = "deal_id, analyst_id, are_emails_filed_id" _
@@ -98,6 +187,7 @@ Public Sub backup_deal_tables()
         
         Close #fileNum
     End If
+    str_milestone = "end of stella_eur.deals_t"
     
     'Americas
     If Dir(file_path_us) = "" Then
@@ -127,23 +217,15 @@ Public Sub backup_deal_tables()
         
         Close #fileNum
     End If
+    str_milestone = "end of stella_us.deals_t"
     
 outro:
     Set rs = Nothing
+    utilities.call_stack_remove_last_item
     Exit Sub
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, str_milestone, "", "", True
+    Resume outro
 End Sub
 
 Public Sub open_external_resource_app(ByVal app_name As String _
@@ -221,18 +303,8 @@ outro:
     Exit Sub
 
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = str_milestone
-        .params = "str_sql = " & str_sql
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, str_milestone, "", "", True
+    Resume outro
 End Sub
 
 Public Sub budget_home_change(ByVal deal_id As Long, budget_home_id As Long)
@@ -280,18 +352,8 @@ outro:
     Exit Sub
 
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = "deal_id = " & deal_id & ", budget_home_id = " & budget_home_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, str_sql, "", "", True
+    Resume outro
 End Sub
 Public Sub deal_status_was_changed(ByVal deal_id As Long _
 , ByVal new_deal_status_id As Long _
