@@ -1,3 +1,4 @@
+Attribute VB_Name = "Central"
 Option Compare Database
 Option Explicit
 
@@ -110,8 +111,10 @@ Public Sub backup_deal_tables()
     Dim str_milestone As String
     Dim str_sql As String
     
-    str_milestone = "Before test error"
-    load.check_conn_and_variables
+    'backup folder only available on the European server
+    If load.system_info.app_continent = load.system_info.continents.americas Then
+        GoTo outro
+    End If
     
     data_points = "deal_id, analyst_id, are_emails_filed_id" _
     & ", broker_firm_id, broker_person, budget_home_id, buyer_business_name, buyer_financial_firm_id, buyer_law_firm_1_id, buyer_law_firm_2_id" _
@@ -231,10 +234,8 @@ End Sub
 Public Sub open_external_resource_app(ByVal app_name As String _
 , need_new_app As Boolean _
 , app_file_path As String)
-
-    Dim proc_name As String
-    proc_name = "central.open_external_resource_app"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "central.open_external_resource_app"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -308,9 +309,8 @@ err_handler:
 End Sub
 
 Public Sub budget_home_change(ByVal deal_id As Long, budget_home_id As Long)
-    Dim proc_name As String
-    proc_name = "central.budget_home_change"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "central.budget_home_change"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -359,9 +359,8 @@ Public Sub deal_status_was_changed(ByVal deal_id As Long _
 , ByVal new_deal_status_id As Long _
 , ByVal update_other_forms As Boolean _
 , ByVal old_deal_status_id As Long)
-    Dim proc_name As String
-    proc_name = "central.deal_status_was_changed"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "central.deal_status_was_changed"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -446,9 +445,9 @@ err_handler:
     GoTo outro
 End Sub
 
-
 Public Function get_nbi_template_path(Optional ByVal spa_law_id As Long, Optional ByVal spa_law As String)
-    load.call_stack = load.call_stack & vbNewLine & "central.get_nbi_template_path"
+    Const proc_name As String = "central.get_nbi_template_path"
+    utilities.call_stack_add_item proc_name
     Dim rs As ADODB.Recordset
     Dim str_sql As String, strNBIAbb As String
     Dim nbi_id As Integer
@@ -472,7 +471,8 @@ Public Function get_nbi_template_path(Optional ByVal spa_law_id As Long, Optiona
     get_nbi_template_path = load.system_info.system_paths.template_path & "templates\NBI\NBI " & strNBIAbb & ".docx"
 End Function
 Public Function get_current_risk_status(ByVal deal_id As Long) As Long
-    load.call_stack = load.call_stack & vbNewLine & "central.get_current_risk_status"
+    Const proc_name As String = "central.get_current_risk_status"
+    utilities.call_stack_add_item proc_name
     Dim str_sql As String
     str_sql = "SELECT deal_status_id FROM " & load.sources.deals_table & " WHERE deal_id = " & deal_id
     Dim rs As ADODB.Recordset
@@ -490,7 +490,9 @@ Public Function get_current_risk_status(ByVal deal_id As Long) As Long
 End Function
 
 Public Function are_there_rp_policies_on_deal(ByVal deal_id As Long) As Long
-    load.call_stack = load.call_stack & vbNewLine & "central.are_there_rp_policies_on_deal"
+    Const proc_name As String = "central.are_there_rp_policies_on_deal"
+    utilities.call_stack_add_item proc_name
+    
     Dim rs As ADODB.Recordset
     str_sql = "SELECT id FROM " & sources.policies_table & " WHERE is_deleted = 0 AND rp_on_layer = 93 AND deal_id = " & deal_id
     Set rs = utilities.create_adodb_rs(conn, str_sql)
@@ -502,139 +504,37 @@ Public Function are_there_rp_policies_on_deal(ByVal deal_id As Long) As Long
     Set rs = Nothing
 End Function
 Public Sub limit_premium_and_summary_central(ByVal deal_id As Variant)
-    load.call_stack = load.call_stack & vbNewLine & "central.lmit_premium_and_summary_central"
+    Const proc_name As String = "central.lmit_premium_and_summary_central"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = False Then On Error GoTo 0
-    Dim error_occured As Boolean
-    error_occured = False
+    
+    Dim str_milestone As String
     
     load.check_secondary_access_app
+    Central.open_external_resource_app "scripts.accdb", False, load.system_info.system_paths.scripts_path
+    
     With load.secondary_access_app
-        .Visible = False
-        .CloseCurrentDatabase
-        .OpenCurrentDatabase load.system_info.system_paths.scripts_path, False
-        .Visible = False
-        
-        'Tuesday 17 Dec 2024, CK: Somehow, the script document is locked in an error, and I can't replace it or do anything. So I'm creating a redundancy.
-        On Error GoTo err_handler
         .Run "limit_premium_and_summary_central", deal_id, load.system_info.app_continent
         
-        'Tuesday 17 Dec 2024, CK: if an error was thrown, try the secondary script. It's the same as the primary,
-        'so if the code id bad, the error will continue. However, if the file is corrupted, this might work.
-        If error_occured = True Then
-            .OpenCurrentDatabase load.system_info.system_paths.scripts_path_secondary, False
-            .Visible = False
-            .Run "limit_premium_and_summary_central", deal_id, load.system_info.app_continent
-        End If
-        
+        str_milestone = "4"
         .CloseCurrentDatabase
+        
+        str_milestone = "5"
         .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
-        .Visible = False
     End With
-    Exit Sub
 
 outro:
+    load.secondary_access_app.Visible = False
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.limit_premium_and_summary_central"
-        .milestone = ""
-        .params = "deal_i = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    If error_occured = False Then
-        error_occured = True
-        Resume Next
-    Else
-        GoTo outro
-    End If
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
-Public Function generate_program_summary(ByVal deal_id As Variant, format_as_html As Boolean, include_broker_commission As Boolean)
-    load.call_stack = load.call_stack & vbNewLine & "central.generate_program_summary"
-    'CK 30 September 2024: This shall be deleted, once we know old way is not required for central.limit_and_premium_central
-    
-    'intro
-    On Error GoTo err_handler
-    If load.is_debugging = True Then On Error GoTo 0
-    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
-    
-    Dim line_break
-    line_break = vbNewLine
-    If format_as_html = True Then line_break = "<br>"
-    Dim lead_limit As String
-    
-    Dim retention As Currency, lead_insurer As String, str_text As String
-    str_sql = "SELECT deal_id, deal_name, primary_insurer_hr, retention FROM " & load.sources.deals_view & " WHERE deal_id = " & deal_id
-    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
-        If IsNull(rs!primary_insurer_hr) = False Then
-            lead_insurer = rs!primary_insurer_hr
-            retention = Nz(rs!retention, 0)
-        End If
-        str_text = "Primary insurer: " & lead_insurer & line_break
-    rs.Close
-    
-    str_sql = "SELECT * FROM " & sources.policies_view & " WHERE deal_id = " & deal_id & " ORDER BY layer_no"
-    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
-        If CLng(rs.RecordCount) = 0 Then
-            GoTo outro
-        End If
-        rs.MoveFirst
-        Dim current_layer As Integer, policy_limit As Variant, rol As Variant
-        current_layer = -1
-        Do Until rs.EOF = True
-            If rs!layer_no <> current_layer Then
-                str_text = str_text & line_break & "budget home: " & rs!budget_home _
-                    & line_break & "navins home: " & rs!navins_home _
-                    & line_break & "issuing entity: " & rs!issuing_entity _
-                    & line_break & make_numbering_pretty(rs!layer_no) & ": " & Format(rs!layer_limit, "#,###") _
-                    & " xs " & (Nz(rs!underlying_limit, 0) + retention) / 1000000 & "M" & line_break
-            End If
-            If rs!rp_on_layer = 93 Then
-                policy_limit = Nz(rs!layer_limit, 0) * Nz(rs!quota, 0)
-                If policy_limit = 0 Then
-                    rol = "n/a"
-                Else
-                    rol = FormatPercent(rs!policy_premium / policy_limit, 4)
-                End If
-                str_text = str_text & " RP Limit: " & Format(rs!layer_limit * rs!quota, "#,###") & " (" & FormatPercent(rs!quota, 4) & " of layer)" _
-                    & line_break & " RP Premium: " & Format(rs!policy_premium, "#,###") & " (ROL: " & rol & ")"
-                str_text = str_text & line_break & " Policy no: " & rs!policy_no_universal
-                If include_broker_commission = True Then
-                    str_text = str_text & line_break & "broker commission: " & rs!broker_commission * 100 & "%"
-                End If
-                If IsNull(rs!rp_on_layer) = False Then
-                    str_text = str_text & line_break & " RP on: " & rs!rp_on_layer_hr & line_break
-                End If
-            End If
-            current_layer = rs!layer_no
-            rs.MoveNext
-        Loop
-    rs.Close
-    Set rs = Nothing
-    generate_program_summary = str_text
-outro:
-    If Not rs Is Nothing Then
-        If rs.State = 1 Then rs.Close
-        Set rs = Nothing
-    End If
-    Exit Function
-err_handler:
-    MsgBox "Something went wrong. Try once more. If it fails again, snip this to Christian." & vbNewLine & vbNewLine _
-        & "Error number: " & Err.Number & vbNewLine _
-        & "Error description: " & Err.Description & vbNewLine _
-        & "Where: central.generate_program_summary" & vbNewLine _
-        & "Parameters: deal_id = " & deal_id & vbNewLine _
-        & "App: Stella UW Eur", , " Whoopsie daisies (like Hugh Grant in Notting Hill)"
-    GoTo outro
-End Function
 Public Function make_numbering_pretty(ByVal layer_no As Long) As String
+    Const proc_name As String = "central.make_numbering_pretty"
+    utilities.call_stack_add_item proc_name
+    
     If layer_no = 0 Then
         make_numbering_pretty = "Primary"
     ElseIf layer_no = 1 Or layer_no = 6 Then
@@ -646,9 +546,15 @@ Public Function make_numbering_pretty(ByVal layer_no As Long) As String
     ElseIf layer_no >= 4 And layer_no <= 20 Then
         make_numbering_pretty = layer_no & "th xs"
     End If
+outro:
+    Exit Function
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Function
 Public Sub StatusChange(ByVal obj_deal As cls_deal)
-    load.call_stack = load.call_stack & vbNewLine & "central.StatusChange"
+    Const proc_name As String = "central.StatusChange"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -720,26 +626,15 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.StatusChange"
-        .milestone = ""
-        .params = "obj_deal.deal_id = " & Nz(obj_deal.deal_id, "-1")
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "obj_deal.deal_id = " & Nz(obj_deal.deal_id, "-1"), "", True
+    Resume outro
 End Sub
 Public Sub folder_check(ByVal deal_id As Long _
 , ByVal new_deal_status_id As Long _
 , ByVal old_deal_status_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "central.folder_check"
+    Const proc_name As String = "central.folder_check"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
         
@@ -852,24 +747,13 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.folder_check"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 Public Sub populate_deal_details_f(ByVal deal_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "central.populate_deal_details"
+    Const proc_name As String = "central.populate_deal_details"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -1003,24 +887,14 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.populate_deal_details_f"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 
 Public Sub update_currencies(ByVal deal_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "central.update_currencies"
+    Const proc_name As String = "central.update_currencies"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -1103,25 +977,14 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.update_currencies"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 Public Function find_vat_home(ByVal obj_deal As cls_deal, ByVal conn As ADODB.Connection) As Boolean
-    load.call_stack = load.call_stack & vbNewLine & "central.find_vat_home"
+    Const proc_name As String = "central.find_vat_home"
+    utilities.call_stack_add_item proc_name
+    
     Dim must_find_vat_home As Boolean
     must_find_vat_home = False
         If obj_deal.vat_home <> 666 Then
@@ -1159,11 +1022,15 @@ Public Function find_vat_home(ByVal obj_deal As cls_deal, ByVal conn As ADODB.Co
             'Sub must be run again when vat_home has been populated.
         End If
     find_vat_home = must_find_vat_home
+outro:
+    Exit Function
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Function
 Public Sub spa_law_was_updated(ByVal deal_id As Long)
-    'Purpose: Update RPEntity (also referred to as budget_home) based on a change in spa_law
-    
-    load.call_stack = load.call_stack & vbNewLine & "central.spa_law_was_updated"
+    Const proc_name As String = "central.spa_law_was_updated"
+    utilities.call_stack_add_item proc_name
     
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
@@ -1221,24 +1088,13 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.spa_law_was_changed"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 Public Function create_new_deal() As Long
-    load.call_stack = load.call_stack & vbNewLine & "central.create_new_deal"
+    Const proc_name As String = "central.create_new_deal"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -1301,28 +1157,16 @@ outro:
         Set rs = Nothing
     End If
     Exit Function
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.create_new_deal"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Function
 Public Sub submission_email()
-    load.call_stack = load.call_stack & vbNewLine & "central.submission_email"
-    'intro
+    Const proc_name As String = "central.submission_email"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
+    
     If CurrentProject.AllForms("sub_control_f").IsLoaded = False Then Exit Sub
     
     'list columns
@@ -1459,29 +1303,18 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.submission_email"
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 
 Public Sub data_logger(log_object As cls_log_object)
-    Dim str_milestone As String
-    load.call_stack = load.call_stack & vbNewLine & "central.data_logger"
+    Const proc_name As String = "central.data_logger"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
+    Dim str_milestone As String
     Dim str_sql As String, rs As ADODB.Recordset, i As Integer
     Dim input_value As Variant
     
@@ -1508,29 +1341,19 @@ outro:
         Set rs = Nothing
     End If
     Exit Sub
-
 err_handler:
-
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.data_logger"
-        .milestone = "str_sql = " & str_sql _
-        & vbNewLine & vbNewLine & "str_milestone = " & str_milestone
-        .params = "log_object.record_id = " & log_object.record_id _
-        & ", log_object.data_set = " & log_object.data_set _
-        & ", log_object.field_name = " & log_object.field_name
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description _
+    , "str_sql = " & str_sql & vbNewLine & "str_milestone = " & str_milestone _
+    , "log_object.record_id = " & log_object.record_id _
+    & ", log_object.data_set = " & log_object.data_set _
+    & ", log_object.field_name = " & log_object.field_name _
+    , "", True
+    Resume outro
 End Sub
 
 Public Sub search_from_main_menu()
-    load.call_stack = load.call_stack & vbNewLine & "central.search_from_main_menu"
+    Const proc_name As String = "central.search_from_main_menu"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
  
@@ -1607,19 +1430,8 @@ outro:
     Exit Sub
     
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "central.search_from_main_menu"
-        .milestone = ""
-        .params = "str_condition = " & str_condition
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "str_condition = " & str_condition, "", True
+    Resume outro
 End Sub
 
 
