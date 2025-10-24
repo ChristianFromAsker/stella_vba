@@ -1,3 +1,4 @@
+Attribute VB_Name = "Paths"
 Option Compare Database
 Option Explicit
 Public Sub fix_folder_backlog()
@@ -109,51 +110,13 @@ Public Function folder_path_from_scripts(ByVal deal_id As Long, normative_or_fin
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
-    Dim current_db_name As String
-    Dim open_app As Boolean
-    Dim str_app_path As String
     Dim str_milestone As String
     Dim str_folder_path As String
-    Dim waiting_message As String
-    Dim waiting_message_details As String
     
-    waiting_message = "Let me see if I can find the deal folder. Might be a little while, depending on how well it is hidden."
-    waiting_message_details = ""
-    If CurrentProject.AllForms("working_on_it_f").IsLoaded = False Then
-        open_forms.working_on_it_f waiting_message, waiting_message_details, 6000
-    End If
-    
-    str_milestone = "1"
     load.check_secondary_access_app
-    str_milestone = "1a"
+    Central.open_external_resource_app "scripts.accdb", False, load.system_info.system_paths.common_path & "scripts.accdb"
+    
     With load.secondary_access_app
-        str_app_path = load.system_info.system_paths.scripts_path
-        
-        current_db_name = ""
-        On Error Resume Next
-        current_db_name = load.secondary_access_app.CurrentDb.Name
-        On Error GoTo err_handler
-        If load.is_debugging = True Then On Error GoTo 0
-        
-        open_app = False
-        If current_db_name = "" Then
-            open_app = True
-        ElseIf current_db_name <> str_app_path Then
-            .CloseCurrentDatabase
-            open_app = True
-        End If
-        
-        If open_app = True Then
-            .OpenCurrentDatabase str_app_path, False
-        End If
-        
-        str_milestone = "2"
-        ' .Visible = False
-        
-        'Tuesday 17 Dec 2024, CK: Somehow, the script document is locked in an error, and I can't replace it or do anything. _
-        So I'm creating a redundancy.
-        
-        On Error GoTo err_path
         If normative_or_find = "normative" Then
             If load.system_info.app_continent = load.system_info.continents.americas Then
                 str_folder_path = CStr(.Run("create_normative_folder_path_us", deal_id, load.system_info.app_continent))
@@ -161,38 +124,16 @@ Public Function folder_path_from_scripts(ByVal deal_id As Long, normative_or_fin
                 str_folder_path = CStr(.Run("create_normative_folder_path", deal_id, load.system_info.app_continent))
             End If
         ElseIf normative_or_find = "find" Then
-            str_folder_path = CStr(.Run("find_folder", deal_id, load.system_info.app_continent))
+            str_folder_path = CStr(.Run("scripts.find_folder", deal_id, load.system_info.app_continent))
         End If
-        
-err_path:
-        If Err.Number = 40351 Then
-            Err.Clear
-            MsgBox "PLEASE READ THIS. Complete the below instructions before moving on." _
-            & vbNewLine & vbNewLine & "We have a small issue which I will need your help to solve." _
-            & vbNewLine & vbNewLine & "Somwehere on your screen, there is a button which says 'enable content'. Please click it." _
-            & vbNewLine & vbNewLine & "You may see it in the top left of your screen." _
-            & vbNewLine & vbNewLine & "If do not see it, look on on your taskbar (the line at the bottom of your screen), for an Access (Stella) window called 'scripts'. Click on it to show the button." _
-            & vbNewLine & vbNewLine & "If you don't see 'scripts', you might need to hover your mouse cursor over the Access (Stell) app on the task bar. Then you'll see 'scipts'. Click on it to show the button." _
-            & vbNewLine & vbNewLine & "When you have clicked on 'enable content', click 'ok' below and try again." _
-            , , "Small issue"
             
-            On Error GoTo err_handler
-            If load.is_debugging = True Then On Error GoTo 0
-        
-            .CloseCurrentDatabase
-            
-            GoTo outro
-        End If
-        
-        On Error GoTo err_handler
-        If load.is_debugging = True Then On Error GoTo 0
-    
         str_milestone = "4"
         .CloseCurrentDatabase
         
         str_milestone = "5"
         .OpenCurrentDatabase load.system_info.system_paths.common_path & "placeholder.accdb", False
     End With
+    
     str_milestone = "6"
     folder_path_from_scripts = str_folder_path
     

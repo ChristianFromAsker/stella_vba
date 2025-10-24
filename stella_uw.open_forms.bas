@@ -1,3 +1,4 @@
+Attribute VB_Name = "open_forms"
 Option Compare Database
 Option Explicit
 
@@ -447,16 +448,16 @@ Public Sub kpi_dashboard_f()
             Do While .ListCount > 0
                 .RemoveItem (0)
             Loop
-            .AddItem load.time_periods.last_seven_days & ";'last 7 days'"
-            .AddItem load.time_periods.last_14_days & ";'last 14 days'"
-            .AddItem load.time_periods.last_30_days & ";'last 30 days'"
-            .AddItem load.time_periods.last_3_months & ";'last 3 months'"
-            .AddItem load.time_periods.last_12_months & ";'last 12 months'"
-            .AddItem load.time_periods.previous_month & ";'previous month'"
-            .AddItem load.time_periods.previous_year & ";'previous year'"
-            .AddItem load.time_periods.this_month & ";'this month'"
-            .AddItem load.time_periods.ytd & ";'YTD'"
-            .value = load.time_periods.last_14_days
+            .AddItem global_vars.time_periods.last_seven_days & ";'last 7 days'"
+            .AddItem global_vars.time_periods.last_14_days & ";'last 14 days'"
+            .AddItem global_vars.time_periods.last_30_days & ";'last 30 days'"
+            .AddItem global_vars.time_periods.last_3_months & ";'last 3 months'"
+            .AddItem global_vars.time_periods.last_12_months & ";'last 12 months'"
+            .AddItem global_vars.time_periods.previous_month & ";'previous month'"
+            .AddItem global_vars.time_periods.previous_year & ";'previous year'"
+            .AddItem global_vars.time_periods.this_month & ";'this month'"
+            .AddItem global_vars.time_periods.ytd & ";'YTD'"
+            .value = global_vars.time_periods.last_14_days
         End With
             
         DoCmd.MoveSize Right:=0, Down:=0, Width:=15000, Height:=12000
@@ -505,13 +506,14 @@ Public Sub weekly_view_f()
     Dim proc_name As String
     proc_name = "open_forms.weekly_view_f"
     load.call_stack = load.call_stack & vbNewLine & proc_name
-    
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
     Dim cmd_foreign_deals As cls_field
+    Dim control_name As String
     Dim current_control As Access.Control
     Dim form_field As cls_field
+    Dim row_source As String
     Dim rs As ADODB.Recordset
     Dim str_form As String
     
@@ -569,23 +571,26 @@ Public Sub weekly_view_f()
         arr_controls(i, 0) = "selector_operational_re"
         arr_controls(i, 1) = "SELECT DISTINCT(target_sector_group_2) id, ' ' menu_item FROM " & load.sources.weekly_view_f
         
-        i = i + 1
-        arr_controls(i, 0) = "header_selector_uws"
-        arr_controls(i, 1) = load.sources.menu_lists.uws
-        
         arr_controls(0, 0) = i
         
         For i = 1 To arr_controls(0, 0)
-            Do While .Controls(arr_controls(i, 0)).ListCount > 0
-                .Controls(arr_controls(i, 0)).RemoveItem (0)
-            Loop
+            .Controls(arr_controls(i, 0)).RowSource = ""
         Next i
+        
+        control_name = global_vars.interfaces.weekly_view_f.header_selector_uws.field_name
+        .Controls(control_name).RowSource = "0;_all;" & load.sources.menu_lists.row_sources_uws
+        
+        row_source = "-2;'Declined - aim for xs'; -1;'---'; " & load.sources.menu_lists.row_soruce_deal_statuses
+        .Controls(global_vars.interfaces.weekly_view_f.txt_deal_status_change.field_name).RowSource = row_source
+        
+        control_name = global_vars.interfaces.weekly_view_f.txt_nbi_prepper_change.field_name
+        .Controls(control_name).RowSource = "-1;' ';" & load.sources.menu_lists.row_sources_uws
         
         'add 'all option'
         !header_budget_region.AddItem "0;_all"
         !selector_risk_type.AddItem "0;_all"
         !selector_operational_re.AddItem "_all;_all"
-        !header_selector_uws.AddItem "0;_all"
+        
         
         For i = 1 To arr_controls(0, 0)
             str_sql = arr_controls(i, 1)
@@ -604,11 +609,13 @@ Public Sub weekly_view_f()
         !header_selector_uws = 0
         
         Set cmd_foreign_deals = global_vars.interfaces.weekly_view_f.header_cmd_foreign_deals
+        
+        'load recordset
         If load.system_info.app_continent = load.system_info.continents.americas Then
             !selector_risk_type = 0
             !selector_operational_re = "_all"
             !header_budget_region = 0
-            fix_rs.weekly_view_f 0, , 0, load.current_uw.budget_continent_id, "_all", cmd_foreign_deals.field_value
+            fix_rs.weekly_view_f 0, , 0, load.current_uw.budget_continent_id, "_all", , cmd_foreign_deals.field_value
         Else
             !selector_risk_type = 100
             !selector_operational_re = "_all"
@@ -619,76 +626,70 @@ Public Sub weekly_view_f()
         'fix row formatting
         Dim objFormatConds As FormatCondition
         
-        ReDim arr_controls(0 To 30)
-        i = 1
-        arr_controls(i) = "broker_info": i = i + 1
-        arr_controls(i) = "budget_home": i = i + 1
-        arr_controls(i) = "buyer_business_name"
-        
-        i = i + 1
-        arr_controls(i) = global_vars.interfaces.weekly_view_f.txt_buyer_law_firm_1.field_name
-        
-        i = i + 1
-        arr_controls(i) = "change_roles": i = i + 1
-        arr_controls(i) = "deal_info": i = i + 1
-        arr_controls(i) = "ev_deal": i = i + 1
-        arr_controls(i) = "nbi_deadline": i = i + 1
-        arr_controls(i) = "roles": i = i + 1
-        arr_controls(i) = "submission_limits": i = i + 1
-        arr_controls(i) = "submission_notes": i = i + 1
-        arr_controls(i) = "target_business_name": i = i + 1
-        arr_controls(i) = "week_no"
-        
-        If load.system_info.app_continent <> load.system_info.continents.americas Then
-            i = i + 1
-            arr_controls(i) = "deal_name"
-        Else
-            i = i + 1
-            arr_controls(i) = global_vars.interfaces.weekly_view_f.txt_re_quote_info.field_name
-            i = i + 1
-            arr_controls(i) = "target_description"
-        End If
-        
-        arr_controls(0) = i
-        
-        For i = 1 To arr_controls(0)
-            Set objFormatConds = .Controls(arr_controls(i)).FormatConditions.Add(acExpression, , "[week_no_number] = " & Format(Date, "WW", vbMonday) - 1 _
-                & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 3 _
-                & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 5 _
-                & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 7 _
-                & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 9 _
-                & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 11)
+        'format rows based on week number
+        Set current_control = .Controls(global_vars.interfaces.weekly_view_f.txt_row_bg.field_name)
+        Set objFormatConds = current_control.FormatConditions.Add(acExpression _
+        , , "[week_no_number] = " & Format(Date, "WW", vbMonday) - 1 _
+        & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 3 _
+        & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 5 _
+        & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 7 _
+        & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 9 _
+        & " Or [week_no_number] = " & Format(Date, "WW", vbMonday) - 11)
                 
-            .Controls(arr_controls(i)).FormatConditions(0).BackColor = load.colors.week_1
-        Next i
+        current_control.FormatConditions(0).BackColor = load.colors.week_1
         
-        With .Controls("deal_status")
-            Set objFormatConds = .FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.declined)
-            .FormatConditions(0).BackColor = load.colors.light_red
-            
-            Set objFormatConds = .FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.nbi _
-                & " OR [status_id] = " & load.deal_statuses.preferred _
-                & " OR [status_id] = " & load.deal_statuses.expensed _
-                & " OR [status_id] = " & load.deal_statuses.uw)
-            .FormatConditions(1).BackColor = load.colors.quoted
-            
-            Set objFormatConds = .FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.submission)
-            .FormatConditions(2).BackColor = load.colors.submission_color
-        End With
+        'format deal status
+        Set current_control = .Controls("deal_status")
+        Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.declined)
+        current_control.FormatConditions(0).BackColor = load.colors.light_red
         
+        Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.nbi _
+        & " OR [status_id] = " & load.deal_statuses.preferred _
+        & " OR [status_id] = " & load.deal_statuses.expensed _
+        & " OR [status_id] = " & load.deal_statuses.uw)
+        current_control.FormatConditions(1).BackColor = load.colors.quoted
+            
+        Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[status_id] = " & load.deal_statuses.submission)
+        current_control.FormatConditions(2).BackColor = load.colors.submission_color
+        
+        'format risk type and buyer business name
         With global_vars.interfaces.weekly_view_f
-            Set current_control = Forms(str_form).Controls(.txt_deal_name.field_name)
             If load.system_info.app_continent = load.system_info.continents.americas Then
-                Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.wi)
+                'risk type
+                Set current_control = Forms(str_form).Controls(.txt_deal_name.field_name)
+    
+                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
+                , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.wi)
                 current_control.FormatConditions(0).BackColor = load.colors.risk_type_wi
-                
-                Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.tax)
+
+                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
+                , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.tax)
                 current_control.FormatConditions(1).BackColor = load.colors.risk_type_tax
-                
-                Set objFormatConds = current_control.FormatConditions.Add(acExpression, , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.contingency)
+
+                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
+                , "[" & .txt_risk_type_major_id.field_name & "] = " & global_vars.risk_types.contingency)
                 current_control.FormatConditions(2).BackColor = load.colors.risk_type_cont
+                
+                'buyer business name
+                Set current_control = Forms(str_form).Controls(.txt_buyer_business_name.field_name)
+                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
+                , "[" & .txt_is_repeat_buyer.field_name & "] = ""yes""")
+                current_control.FormatConditions(0).BackColor = load.colors.Is_repeat_buyer
             End If
         End With
+        
+        'format submission notes based on whether the word 'joinder' is in there
+        With global_vars.interfaces.weekly_view_f
+            If load.system_info.app_continent = load.system_info.continents.americas Then
+                Set current_control = Forms(str_form).Controls(.txt_submission_notes.field_name)
+    
+'                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
+'                , instr("[" & .txt_submission_notes & "], ) = " & "joinder")
+                ' current_control.FormatConditions(0).BackColor = load.colors.yellow
+            End If
+        End With
+        
+        Set current_control = Nothing
         
         'movesize
         Dim form_width As Long
@@ -771,28 +772,42 @@ Public Sub live_deals_f()
         ReDim arr_controls(0 To 10, 0 To 1)
         
         i = 1
-        arr_controls(i, 0) = "header_budget_continent"
+        arr_controls(i, 0) = "header_selector_budget_continent"
         arr_controls(i, 1) = load.sources.menu_lists.budget_continents
 
         i = i + 1
-        arr_controls(i, 0) = "header_budget_region"
+        arr_controls(i, 0) = "header_selector_budget_region"
         arr_controls(i, 1) = load.sources.menu_lists.budget_regions & " WHERE budget_continent_id = " & load.current_uw.budget_continent_id
         
         i = i + 1
-        arr_controls(i, 0) = "selector_risk_type"
+        arr_controls(i, 0) = "header_selector_risk_type"
         arr_controls(i, 1) = load.sources.menu_lists.risk_types_major
         
         i = i + 1
-        arr_controls(i, 0) = "selector_operational_re"
+        arr_controls(i, 0) = "header_selector_operational_re"
         arr_controls(i, 1) = "SELECT DISTINCT(target_sector_group_2) id, ' ' menu_item FROM " & load.sources.live_deals_view
+        
+        i = i + 1
+        arr_controls(i, 0) = "header_selector_uws"
+        arr_controls(i, 1) = load.sources.menu_lists.uws
         
         arr_controls(0, 0) = i
         
         For i = 1 To arr_controls(0, 0)
-            Do While .Controls(arr_controls(i, 0)).ListCount > 0
-                .Controls(arr_controls(i, 0)).RemoveItem (0)
-            Loop
+            .Controls(arr_controls(i, 0)).RowSource = ""
         Next i
+        
+        'add manual options to drop-downs'
+        .Controls(global_vars.interfaces.live_deals_f.header_selector_budget_region.field_name).AddItem "0;_all"
+        .Controls(global_vars.interfaces.live_deals_f.header_selector_risk_type.field_name).AddItem "0;_all"
+        .Controls(global_vars.interfaces.live_deals_f.header_selector_operational_re.field_name).AddItem "_all;_all"
+        With .Controls(global_vars.interfaces.live_deals_f.header_selector_uws.field_name)
+            .AddItem "0;_all"
+            .AddItem "-1;'---'"
+            .AddItem load.current_uw.uw_id & ";" & load.current_uw.initials
+            .AddItem "-1;'---'"
+        End With
+        
         Dim rs As ADODB.Recordset
         For i = 1 To arr_controls(0, 0)
             str_sql = arr_controls(i, 1)
@@ -806,22 +821,27 @@ Public Sub live_deals_f()
         Next i
         Set rs = Nothing
         
-        'add 'all option'
-        !header_budget_region.AddItem "0;_all"
-        !selector_risk_type.AddItem "0;_all"
-        !selector_operational_re.AddItem "_all;_all"
+        'set default values
+        .Controls(global_vars.interfaces.live_deals_f.header_selector_budget_continent.field_name) = load.current_uw.budget_continent_id
+        .Controls(global_vars.interfaces.live_deals_f.header_selector_uws.field_name) = 0
         
-        !header_budget_continent = load.current_uw.budget_continent_id
+        Dim ctl_budget_region As Access.Control
+        Dim ctl_operational_re As Access.Control
+        Dim ctl_risk_type As Access.Control
+        
+        Set ctl_budget_region = .Controls(global_vars.interfaces.live_deals_f.header_selector_budget_region.field_name)
+        Set ctl_operational_re = .Controls(global_vars.interfaces.live_deals_f.header_selector_operational_re.field_name)
+        Set ctl_risk_type = .Controls(global_vars.interfaces.live_deals_f.header_selector_risk_type.field_name)
         
         If load.system_info.app_continent = load.system_info.continents.americas Then
-            !selector_risk_type = 0
-            !selector_operational_re = "_all"
-            !header_budget_region = 0
+            ctl_risk_type = 0
+            ctl_operational_re = "_all"
+            ctl_budget_region = 0
             deal_count = fix_rs.live_deals_f(0, , 0, load.current_uw.budget_continent_id)
         Else
-            !selector_risk_type = 100
-            !selector_operational_re = "operational"
-            !header_budget_region = load.current_uw.budget_region_id
+            ctl_risk_type = 100
+            ctl_operational_re = "operational"
+            ctl_budget_region = load.current_uw.budget_region_id
             deal_count = fix_rs.live_deals_f(current_uw.budget_region_id, , 100, load.current_uw.budget_continent_id)
         End If
         
@@ -904,23 +924,49 @@ Public Sub live_deals_f()
             End If
         End With
         
-        'movesize
-        Dim form_height As Long
-        Dim form_width As Long
+        open_forms.live_deals_f_move_size deal_count
         
-        form_height = deal_count * utilities.twips_converter(0.8, "inch") + utilities.twips_converter(0.8, "inch")
-        If form_height > windows_apis.PositionFormFillVertical(1, "center") * 0.95 Then
-            form_height = windows_apis.PositionFormFillVertical(1, "center") * 0.95
-        End If
-        form_width = 22000
+        ctl_operational_re.SetFocus
+    End With
+    
+outro:
+    Exit Sub
+
+err_handler:
+    Dim err_object As cls_err_object
+    Set err_object = New cls_err_object
+    With err_object
+        .routine_name = proc_name
+        .milestone = ""
+        .params = ""
+        .system_error_code = Err.Number
+        .system_error_text = Err.Description
+        .show_error_msg = True
+        .send_error err_object
+    End With
+    GoTo outro
+
+End Sub
+Public Sub live_deals_f_move_size(ByVal deal_count As Long)
+    Dim proc_name As String
+    proc_name = "open_forms.live_deals_f_move_size"
+    load.call_stack = load.call_stack & vbNewLine & proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+        
+    Dim form_height As Long
+    Dim form_width As Long
+    
+    form_height = deal_count * utilities.twips_converter(0.8, "inch") + utilities.twips_converter(2.6, "inch")
+    If form_height > windows_apis.PositionFormFillVertical(1, "center") * 0.9 Then
+        form_height = windows_apis.PositionFormFillVertical(1, "center") * 0.9
+    End If
+    form_width = 22000
 '        If load.system_info.app_continent = load.system_info.continents.americas Then
 '            form_width = 27000
 '        End If
-        DoCmd.MoveSize Right:=600, Down:=0, Width:=form_width, Height:=form_height
-        
-        !selector_operational_re.SetFocus
-    End With
-    
+    DoCmd.MoveSize Right:=600, Down:=0, Width:=form_width, Height:=form_height
+            
 outro:
     Exit Sub
 
@@ -1023,7 +1069,7 @@ Public Sub policies_f(ByVal deal_id As Long)
     str_form = load.policies.form_name
     
     str_sql = "SELECT deal_id, deal_name, total_rp_premium_on_deal, total_rp_limit_on_deal, lowest_rp_attpoint" _
-    & " FROM " & sources.deals_view & " WHERE deal_id = " & deal_id
+    & " FROM " & load.sources.deals_view & " WHERE deal_id = " & deal_id
     
     Dim deal_name As String
     Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
@@ -1074,28 +1120,30 @@ Public Sub deal_details_f(ByVal deal_id As Long)
     
     Dim box_input As String
     Dim i As Integer
+    Dim init_deal_details As Boolean
     Dim item_id As Long
     Dim item_text As String
     Dim rs As ADODB.Recordset
+    Dim str_form As String
     Dim str_sql As String
     Dim timer_start As Single
     Dim y As Integer
     
     timer_start = Timer
     
-    str_sql = "SELECT * FROM " & sources.deals_view & " WHERE deal_id = " & deal_id
-    Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
+    str_sql = "SELECT deal_id FROM " & load.sources.deals_view & " WHERE deal_id = " & deal_id
+    Set rs = utilities.create_adodb_rs(conn, str_sql)
+    rs.Open
         If rs.BOF And rs.EOF Then
             MsgBox "Deal with deal_id " & deal_id & " cannot be opened. Snip (screenshot) this to Christian" _
                 & " (christian.kartnes@rpgroup.com) and Tom (tom.evans@rpgroup.com).", , "Deal cannot be opened."
             GoTo outro
         End If
     rs.Close
-    Dim str_form As String
+    
     str_form = "deal_details_f"
     
     'rather than closing deal_details_f, it is hidden when being closed. Hiding and unhiding is much faster than closing and reopening
-    Dim init_deal_details As Boolean
     init_deal_details = False
     If CurrentProject.AllForms(str_form).IsLoaded = True Then
         With Forms(str_form)
@@ -1112,7 +1160,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
         load.deal_details.init deal_id
     End If
     
-    Debug.Print "Phase 1 took: " & Timer - timer_start
     timer_start = Timer
     
     'if form is not loaded, load it, and add items to all combo boxes
@@ -1237,9 +1284,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
                 Next menu_item
                 .RowSource = box_input
             End With
-            
-            Debug.Print "Non-sql combo boxes took: " & Timer - timer_start
-            timer_start = Timer
     
             'add the rest of the combo boxes
 
@@ -1347,9 +1391,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
                 .Controls(arr_controls(i, 0)).RowSource = box_input
             Next i
             
-            Debug.Print "sql combo boxes took: " & Timer - timer_start
-            timer_start = Timer
-    
             'fix email list
             Do While !emails.ListCount > 0
                 !emails.RemoveItem (0)
@@ -1413,18 +1454,11 @@ Public Sub deal_details_f(ByVal deal_id As Long)
         End If
     rs.Close
     
-    Debug.Print "last stretch took: " & Timer - timer_start
-    timer_start = Timer
-    
     'Populate fields not dealt with above
     Central.populate_deal_details_f deal_id
-    Debug.Print "putting deal data in took: " & Timer - timer_start
-    timer_start = Timer
     
     load.deal_tags.put_tags_on_deal_details_f deal_id
-    
-    Debug.Print "Deal tags took: " & Timer - timer_start
-    timer_start = Timer
+
 outro:
     If Not rs Is Nothing Then
         If rs.State = 1 Then rs.Close
@@ -1562,9 +1596,7 @@ Public Sub deal_list_f()
             For i = 1 To arr_controls(0, 0)
                 str_sql = arr_controls(i, 1)
                 Set rs = utilities.create_adodb_rs(conn, str_sql)
-                timer_start = Timer
                 rs.Open
-                Debug.Print "time: " & Timer - timer_start
                 Do While rs.EOF = False
                     If rs!menu_item = "_n/a" _
                     Or rs!menu_item = " " _
@@ -1598,7 +1630,6 @@ outro:
         Set rs = Nothing
     End If
     open_forms.working_on_it_f__close
-    Debug.Print "open_forms.deal_list_f duration: " & Timer - timer_start
     Exit Sub
     
 err_handler:

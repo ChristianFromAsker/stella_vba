@@ -1,3 +1,4 @@
+Attribute VB_Name = "windows_apis"
 Option Compare Database
 Option Explicit
 

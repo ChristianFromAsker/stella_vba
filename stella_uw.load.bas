@@ -1,3 +1,4 @@
+Attribute VB_Name = "load"
 Option Compare Database
 Option Explicit
 
@@ -150,6 +151,7 @@ Public Sub refresh_stella_uw()
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
+    load.is_init = False
     load.system_info.init_system_info
     load.init_conn
     load.sources.init
@@ -555,9 +557,14 @@ err_handler:
     Resume outro
 End Sub
 Public Sub init_array_law_firms()
-    load.call_stack = load.call_stack & vbNewLine & "load.init_array_law_firm"
-    'Assing value to current underwriter array
-    Dim str_sql As String, rs As ADODB.Recordset, i As Integer
+    Const proc_name As String = "load.init_array_law_firms"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim str_sql As String
+    Dim rs As ADODB.Recordset
+    Dim i As Integer
     
     str_sql = "SELECT law_firm_id, firm_name, is_counsel" _
     & " FROM " & load.sources.law_firms_view & " ORDER BY firm_name"
@@ -580,6 +587,9 @@ Public Sub init_array_law_firms()
 outro:
     utilities.call_stack_remove_last_item
     Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_broker_firm_array()
     load.call_stack = load.call_stack & vbNewLine & "load.init_broker_firm_array"
@@ -672,13 +682,21 @@ err_handler:
     GoTo outro
 End Sub
 Public Sub init_conn()
-    load.call_stack = load.call_stack & vbNewLine & "load.init_conn"
+    Const proc_name As String = "load.init_conn"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim database_name As String
+    Dim encrypted_string As String
     Dim encryption_key As Long
+    Dim file_path As String
     Dim ip_address As String
-    Dim server_name As String
-    Dim user_name As String
+    Dim pw_file As Long
     Dim pwd As String
+    Dim server_name As String
+    Dim str_conn As String
+    Dim user_name As String
     
     If load.system_info.is_init = False Then
         load.system_info.init_system_info
@@ -694,11 +712,9 @@ Public Sub init_conn()
     user_name = "stella"
     
     'get password
-    Dim pw_file As Integer
     pw_file = FreeFile
-    Dim file_path As String
+    
     file_path = load.system_info.system_paths.pws & "\" & server_name & ".txt"
-    Dim encrypted_string As String
     Open file_path For Input As FreeFile
         encrypted_string = Input(LOF(pw_file), pw_file)
         pwd = CStr(utilities.decrypt_string(encrypted_string, Left(encryption_key, 1), Right(encryption_key, 1)))
@@ -708,7 +724,6 @@ Public Sub init_conn()
     If Not load.conn Is Nothing Then Set load.conn = Nothing
     
     'activate connection
-    Dim str_conn As String
 
 '1 September 2025, CK: We are moving to a new driver. This can be removed when done.
     On Error GoTo new_driver
@@ -748,6 +763,9 @@ new_driver:
 outro:
     utilities.call_stack_remove_last_item
     Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "init_conn failed", True
+    GoTo outro
 End Sub
 Public Sub init_country_list_array()
     Dim proc_name As String
@@ -854,8 +872,8 @@ Public Sub check_conn_and_variables()
         
     load.check_connection
     
+    load.init_global_variables
     If load.is_init = False Then
-        load.init_global_variables
         load.main_menu.refresh_main_menu
         load.main_menu.paint_main_menu
         load.master_deal_list.init

@@ -1,3 +1,4 @@
+Attribute VB_Name = "utilities"
 Option Compare Database
 Option Explicit
 Public Sub call_stack_add_item(ByVal input_proc_name As String)

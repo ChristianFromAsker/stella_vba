@@ -1,5 +1,31 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Form_weekly_view_f"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = True
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
 Option Compare Database
 Option Explicit
+
+Private Sub cmd_change_analyst_Click()
+    Dim proc_name As String
+    proc_name = "weekly_view_f.cmd_change_analyst.Click"
+    load.call_stack = proc_name
+    
+    load.check_conn_and_variables
+    
+    With load.deal_details
+        If .is_init = False Then .init Me!deal_id
+        load.master_deal_list.quick_change .txt_analyst_id.field_name, "Analyst", load.sources.menu_lists.uws, Me!deal_id
+    End With
+    
+outro:
+    load.call_stack = ""
+    Exit Sub
+End Sub
 
 Private Sub cmd_change_budget_home_Click()
     Dim proc_name As String
@@ -22,24 +48,6 @@ Private Sub cmd_change_budget_home_Click()
 outro:
     load.call_stack = ""
     Exit Sub
-End Sub
-
-Private Sub cmd_change_deal_status_Click()
-    Dim proc_name As String
-    proc_name = "weekly_view_f.cmd_change_deal_status.Click"
-    load.call_stack = proc_name
-    
-    load.check_conn_and_variables
-    
-    With load.deal_details
-        If .is_init = False Then .init Me!deal_id
-        load.master_deal_list.quick_change .txt_deal_status_id.field_name, "Deal status", load.sources.menu_lists.deal_statuses, Me!deal_id
-    End With
-    
-outro:
-    load.call_stack = ""
-    Exit Sub
-    
 End Sub
 
 Private Sub cmd_change_is_repeat_buyer_Click()
@@ -92,6 +100,8 @@ Private Sub cmd_change_nbi_prepper_Click()
     load.call_stack = proc_name
     
     load.check_conn_and_variables
+        
+    ' CHECK IF CHANGE OF NBI PREPPER CAN SET DEAL STATUS TO NBN
     
     With load.deal_details
         If .is_init = False Then .init Me!deal_id
@@ -197,7 +207,7 @@ Private Sub cmd_change_submission_notes_Click()
         , Me.Name _
         , load.sources.menu_lists.budget_homes _
         , "" _
-        , Me.Controls("submission_notes")
+        , Nz(Me.Controls("submission_notes"), "")
     End With
     
 outro:
@@ -229,10 +239,14 @@ Private Sub cmd_export_deals_Click()
     Dim str_milestone As String
     Dim str_sql As String
     
-    open_forms.working_on_it_f "Exporting deals.", "'Please hold' says a friendly voice. 'Use this time to take a deep breath and relax your shoulders' it continues.", 6000
-    str_sql = Me.RecordSource
-    Central.open_external_resource_app "reports.accdb"
+    With load.system_info.texts
+        open_forms.working_on_it_f .exporting_excels_heading, .exporting_excels_details, 6000
+    End With
     
+    load.check_secondary_access_app
+    str_sql = Me.RecordSource
+    Central.open_external_resource_app "reports.accdb", False, load.system_info.system_paths.common_path & "reports.accdb"
+
     With load.secondary_access_app
         
         str_milestone = "5"
@@ -265,6 +279,30 @@ err_handler:
     GoTo outro
 End Sub
 
+
+Private Sub deal_status_change_AfterUpdate()
+    Dim proc_name As String
+    proc_name = "weekly_view.deal_status_change.AfterUpdate"
+    load.call_stack = proc_name
+    
+    If Me!deal_status_change = -1 Then
+        GoTo outro
+    End If
+    
+    load.check_conn_and_variables
+    
+    With global_vars.interfaces.weekly_view_f
+        open_forms.working_on_it_f "Updating. Please hold.", "Currencies, deal folders, all that jazz", 3000
+        .change_deal_status Me!deal_id, Me.SelTop, Me.deal_status_change
+    End With
+outro:
+    open_forms.working_on_it_f__close
+    Exit Sub
+End Sub
+
+Private Sub deal_status_Click()
+    Forms(Me.Name).Controls("deal_status_change").SetFocus
+End Sub
 
 Private Sub Form_Load()
     DoCmd.MoveSize Right:=9250, Down:=0, Width:=21000, Height:=6000
@@ -440,6 +478,20 @@ err_handler:
         .send_error err_object
     End With
     GoTo outro
+End Sub
+
+Private Sub nbi_prepper_change_AfterUpdate()
+    Dim proc_name As String
+    proc_name = "weekly_view.nbi_prepper_change.AfterUpdate"
+    load.call_stack = proc_name
+    
+    load.check_conn_and_variables
+    
+    global_vars.interfaces.weekly_view_f.change_nbi_prepper Me!deal_id, Me.SelTop, Me.nbi_prepper_change
+    
+outro:
+    open_forms.working_on_it_f__close
+    Exit Sub
 End Sub
 
 Private Sub selector_operational_re_AfterUpdate()
