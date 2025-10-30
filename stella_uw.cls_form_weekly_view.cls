@@ -61,7 +61,7 @@ Public make_all_fields_visible_for_debugging As Boolean
 
 Public shall_be_refreshed As Boolean
 
-Public tog_foreign_deals As cls_toggle_button
+Public tog_foreign_deals As New cls_toggle_button
 
 Public txt_broker As New cls_field
 Public txt_budget_home As New cls_field
@@ -88,58 +88,6 @@ Public txt_target_business_name As New cls_field
 Public txt_target_description As New cls_field
 Public txt_week_no As New cls_field
 
-Public Sub change_foreign_deals()
-    Dim proc_name As String
-    proc_name = "cls_weekly_view.change_foreign_deals"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
-    On Error GoTo err_handler
-    If load.is_debugging = True Then On Error GoTo 0
-    
-    With Forms(Me.form_name)
-        With .Controls(Me.header_cmd_foreign_deals.field_name)
-            If .Caption = "no" Then
-                .Left = 11300
-                .Caption = "yes"
-                .BackColor = load.colors.light_green
-                .HoverColor = load.colors.light_green
-                global_vars.interfaces.weekly_view_f.header_cmd_foreign_deals.field_value = True
-            Else
-                .Left = 11700
-                .Caption = "no"
-                .BackColor = load.colors.light_red
-                .HoverColor = load.colors.light_red
-                global_vars.interfaces.weekly_view_f.header_cmd_foreign_deals.field_value = False
-            End If
-        End With
-        
-        fix_rs.weekly_view_f .Controls("header_budget_region") _
-        , _
-        , .Controls("selector_risk_type") _
-        , .Controls("header_budget_continent") _
-        , .Controls("selector_operational_re") _
-        , .Controls("header_selector_uws") _
-        , global_vars.interfaces.weekly_view_f.header_cmd_foreign_deals.field_value
-    
-        .Controls("deal_name").SetFocus
-    End With
-    
-outro:
-    Exit Sub
-    
-err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
-End Sub
 Public Sub change_deal_status(ByVal deal_id As Long _
 , ByVal current_row As Long _
 , ByVal new_deal_status_id As Long)
@@ -246,9 +194,8 @@ err_handler:
     GoTo outro
 End Sub
 Public Sub init_collections()
-    Dim proc_name As String
-    proc_name = "cls_form_weekly_view.init_collections"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "cls_form_weekly_view.init_collections"
+    utilities.call_stack_add_item proc_name
     
     Dim col_col As New Collection
     Dim form_field As cls_field
@@ -300,7 +247,6 @@ Public Sub init_collections()
         .Add Me.cmd_change_submission_notes
         .Add Me.txt_deal_status_change
         .Add Me.txt_nbi_prepper_change
-        .Add Me.header_cmd_foreign_deals
     End With
     
     'Americas
@@ -349,7 +295,6 @@ Public Sub init_collections()
         .Add Me.cmd_change_primary_uw
         .Add Me.cmd_change_requote_info
         .Add Me.cmd_change_submission_notes
-        .Add Me.header_cmd_foreign_deals
         .Add Me.txt_deal_status_change
         .Add Me.txt_nbi_prepper_change
     End With
@@ -367,6 +312,9 @@ Public Sub init_collections()
     
     Set Me.col_text_fields_all = Nothing
     With Me.col_text_fields_all
+        For Each form_field In Me.tog_foreign_deals.col_controls
+            .Add form_field
+        Next form_field
         For Each form_field In Me.col_text_fields
             .Add form_field
         Next form_field
@@ -477,14 +425,7 @@ Public Sub init_cmds()
         .field_width = utilities.twips_converter(0.8, "inch")
     End With
     
-    ' Set Me.tog_foreign_deals = New cls_toggle_button
-    ' Me.tog_foreign_deals.init
-    With Me.header_cmd_foreign_deals
-        .field_bg_color = load.colors.light_green
-        .field_width = 540
-        .field_left = 11300
-        .field_name = "header_cmd_foreign_deals"
-    End With
+    Me.tog_foreign_deals.init 100, 9500, "foreign_deals", "Include foreign deals with local UWs"
     
 End Sub
 Public Sub init_lbls()
@@ -820,7 +761,7 @@ Public Sub paint(ByVal input_col As Collection)
             If form_field.field_left = -1 Then
                 form_field.field_left = form_field_prev.field_right
             End If
-            Debug.Print form_field.field_name
+            
             .Left = form_field.field_left + margin_external_left
             .Visible = form_field.field_visible
             If form_field.field_top <> -1 Then
