@@ -11,7 +11,6 @@ Option Compare Database
 Option Explicit
 
 Public cmd_change_analyst As New cls_field
-Public cmd_change_budget_home As New cls_field
 Public cmd_change_is_repeat_buyer As New cls_field
 Public cmd_change_nbi_prepper As New cls_field
 Public cmd_change_primary_uw As New cls_field
@@ -27,6 +26,9 @@ Public col_text_fields_all As New Collection
 Public col_text_fields_us As New Collection
 Public col_cmds_change As New Collection
 Public col_cmds_change_us As New Collection
+Public col_txts_with_dependencies As New Collection
+
+Public density As Long
 
 Public form_name As String
 
@@ -62,10 +64,12 @@ Public make_all_fields_visible_for_debugging As Boolean
 Public shall_be_refreshed As Boolean
 
 Public tog_foreign_deals As New cls_toggle_button
+Public tog_view_density As New cls_toggle_button
 
 Public txt_broker As New cls_field
 Public txt_budget_home As New cls_field
 Public txt_budget_home_change As New cls_field
+Public txt_budget_home_us As New cls_field
 Public txt_buyer_business_name As New cls_field
 Public txt_buyer_law_firm_1 As New cls_field
 Public txt_deadline As New cls_field
@@ -91,9 +95,8 @@ Public txt_week_no As New cls_field
 Public Sub change_deal_status(ByVal deal_id As Long _
 , ByVal current_row As Long _
 , ByVal new_deal_status_id As Long)
-    Dim proc_name As String
-    proc_name = "weekly_view_f.cls_form_weekly_view.change_deal_status"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "weekly_view_f.cls_form_weekly_view.change_deal_status"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -124,21 +127,40 @@ Public Sub change_deal_status(ByVal deal_id As Long _
 outro:
     Forms(Me.form_name).Controls(Me.txt_deal_status_change.field_name) = ""
     Forms(Me.form_name).Controls(Me.txt_deal_name.field_name).SetFocus
+    utilities.call_stack_remove_last_item
     Exit Sub
 
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
+End Sub
+Public Sub change_budget_home(ByVal deal_id As Long _
+, ByVal current_row As Long _
+, ByVal new_budget_home As Long)
+    Const proc_name As String = "weekly_view_f.cls_form_weekly_view.change_budget_home"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim deal_status_id As Long
+    Dim str_sql As String
+    
+    str_sql = "UPDATE " & load.sources.deals_table & " SET budget_home_id = " & new_budget_home & " WHERE deal_id = " & deal_id
+    conn.Execute str_sql
+    
+    fix_rs.weekly_view_f 0, Forms(Me.form_name).RecordSource
+    
+    Forms(Me.form_name).SelTop = current_row
+    
+outro:
+    Forms(Me.form_name).Controls(Me.txt_budget_home_change.field_name) = ""
+    Forms(Me.form_name).Controls(Me.txt_deal_name.field_name).SetFocus
+    utilities.call_stack_remove_last_item
+    Exit Sub
+
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 Public Sub change_nbi_prepper(ByVal deal_id As Long _
 , ByVal current_row As Long _
@@ -203,6 +225,8 @@ Public Sub init_collections()
     'EurAsia
     Set Me.col_header_labels = Nothing
     With Me.col_header_labels
+        .Add Me.header_lbl_deal_name
+        .Add Me.header_lbl_ev
         .Add Me.header_lbl_broker
         .Add Me.header_lbl_submission_limits
         .Add Me.header_lbl_deadline
@@ -221,6 +245,9 @@ Public Sub init_collections()
 
     Set Me.col_text_fields = Nothing
     With Me.col_text_fields
+        .Add Me.txt_week_no
+        .Add Me.txt_deal_name
+        .Add Me.txt_ev_deal
         .Add Me.txt_broker
         .Add Me.txt_submission_limits
         .Add Me.txt_deadline
@@ -234,24 +261,27 @@ Public Sub init_collections()
         .Add Me.txt_deal_id
         .Add Me.txt_is_repeat_buyer
         .Add Me.txt_re_quote_info
+        .Add Me.txt_row_bg
     End With
     
     Set Me.col_cmds_change = Nothing
     With Me.col_cmds_change
         .Add Me.cmd_change_analyst
-        .Add Me.cmd_change_budget_home
         .Add Me.cmd_change_is_repeat_buyer
         .Add Me.cmd_change_nbi_prepper
         .Add Me.cmd_change_primary_uw
         .Add Me.cmd_change_requote_info
         .Add Me.cmd_change_submission_notes
         .Add Me.txt_deal_status_change
+        .Add Me.txt_budget_home_change
         .Add Me.txt_nbi_prepper_change
     End With
     
     'Americas
     Set Me.col_header_labels_us = Nothing
     With Me.col_header_labels_us
+        .Add Me.header_lbl_deal_name
+        .Add Me.header_lbl_ev
         .Add Me.header_lbl_deadline
         .Add Me.header_lbl_broker
         .Add Me.header_lbl_target_description
@@ -271,6 +301,9 @@ Public Sub init_collections()
     
     Set Me.col_text_fields_us = Nothing
     With Me.col_text_fields_us
+        .Add Me.txt_week_no
+        .Add Me.txt_deal_name
+        .Add Me.txt_ev_deal
         .Add Me.txt_deadline
         .Add Me.txt_broker
         .Add Me.txt_target_description
@@ -285,6 +318,7 @@ Public Sub init_collections()
         .Add Me.txt_deal_id
         .Add Me.txt_risk_type_major_id
         .Add Me.txt_is_repeat_buyer
+        .Add Me.txt_row_bg
     End With
     
     Set Me.col_cmds_change_us = Nothing
@@ -296,7 +330,13 @@ Public Sub init_collections()
         .Add Me.cmd_change_requote_info
         .Add Me.cmd_change_submission_notes
         .Add Me.txt_deal_status_change
+        .Add Me.txt_budget_home_change
         .Add Me.txt_nbi_prepper_change
+    End With
+    
+    Set Me.col_txts_with_dependencies = Nothing
+    With Me.col_txts_with_dependencies
+        .Add Me.txt_budget_home_us
     End With
     
     'all items
@@ -312,9 +352,6 @@ Public Sub init_collections()
     
     Set Me.col_text_fields_all = Nothing
     With Me.col_text_fields_all
-        For Each form_field In Me.tog_foreign_deals.col_controls
-            .Add form_field
-        Next form_field
         For Each form_field In Me.col_text_fields
             .Add form_field
         Next form_field
@@ -325,9 +362,14 @@ Public Sub init_collections()
 End Sub
 
 Public Sub init()
-    Dim proc_name As String
-    proc_name = "cls_form_weekly_view.init"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "cls_form_weekly_view.init"
+    utilities.call_stack_add_item proc_name
+    
+    Const density_dense As Long = 3
+    Const density_light As Long = 1
+    Const density_normal As Long = 2
+    
+    Me.density = density_normal
     
     Me.form_name = "weekly_view_f"
     Me.init_collections
@@ -364,17 +406,9 @@ Public Sub init_cmds()
         .field_top = Me.cmd_change_nbi_prepper.field_bottom
         .field_width = Me.header_lbl_change_roles.field_width
     End With
-    With Me.cmd_change_budget_home
-        .field_left = Me.txt_budget_home.field_left
-        .field_name = "cmd_change_budget_home"
-        .field_top = utilities.twips_converter(0.45, "inch")
-        .field_width = Me.txt_budget_home.field_width
-        .margin_external_left = utilities.twips_converter(0.8, "inch") 'catering for control boxes to the left
-    End With
     With Me.cmd_change_is_repeat_buyer
         .field_left = Me.txt_buyer_business_name.field_left
         .field_name = "cmd_change_is_repeat_buyer"
-        .field_top = utilities.twips_converter(0.65, "inch")
         .field_width = Me.txt_buyer_business_name.field_width
     End With
     With Me.cmd_change_nbi_prepper
@@ -403,18 +437,24 @@ Public Sub init_cmds()
     With Me.txt_deal_status_change
         .field_left = Me.txt_deal_status.field_left
         .field_name = "deal_status_change"
+        .field_top = 0
         .field_width = Me.txt_deal_status.field_width
+        .margin_external_left = 0
         If load.system_info.app_continent = load.system_info.continents.americas Then
             .margin_external_left = Me.header_lbl_change_roles.field_width 'catering for control boxes to the left
         End If
     End With
     With Me.txt_budget_home_change
         .field_name_in_table = global_vars.data_fields.budget_home_id.field_name_in_table
-        .field_left = Me.txt_deal_status.field_left
+        .field_left = Me.txt_budget_home.field_left + Me.txt_budget_home.margin_external_left
+        .field_top = 0
         .field_name = "budget_home_change"
-        .field_top = utilities.twips_converter(0.65, "inch")
-        .field_width = Me.txt_deal_status.field_width
+        .field_width = Me.txt_budget_home.field_width
+        .margin_external_left = 0
         If load.system_info.app_continent = load.system_info.continents.americas Then
+            .field_left = Me.txt_deal_status.field_left
+            .field_top = Me.txt_deal_status.field_bottom - .field_height
+            .field_width = Me.txt_deal_status.field_width
             .margin_external_left = Me.header_lbl_change_roles.field_width 'catering for control boxes to the left
         End If
     End With
@@ -426,8 +466,42 @@ Public Sub init_cmds()
     End With
     
     Me.tog_foreign_deals.init 100, 9500, "foreign_deals", "Include foreign deals with local UWs"
+    With Me.tog_view_density
+        .init 100, 17000, "view_density", "view density"
+        .cmd_toggle.field_caption = "normal"
+        .toggle_position = 2
+        .change Me.form_name
+    End With
     
 End Sub
+Public Sub re_init_bottom_cmds()
+    With Me.cmd_change_is_repeat_buyer
+        .field_top = Me.txt_buyer_business_name.field_bottom - .field_height
+    End With
+    With Me.cmd_change_requote_info
+        .field_top = Me.txt_re_quote_info.field_bottom - .field_height
+    End With
+    With Me.cmd_change_submission_notes
+        .field_top = Me.txt_submission_notes.field_bottom - .field_height
+    End With
+    
+    With Me.cmd_change_analyst
+        .field_top = Me.cmd_change_nbi_prepper.field_bottom
+    End With
+    With Me.cmd_change_primary_uw
+        .field_top = Me.cmd_change_analyst.field_bottom
+    End With
+    With Me.txt_budget_home_change
+        .field_top = 0 + Me.txt_budget_home.margin_internal_top
+        If load.system_info.app_continent = load.system_info.continents.americas Then
+            .field_top = Me.txt_deal_status_change.field_bottom + .field_height
+        End If
+    End With
+    With Me.txt_budget_home_us
+        .field_top = Me.txt_deal_status_change.field_bottom + .field_height
+    End With
+End Sub
+
 Public Sub init_lbls()
     
     Dim form_field As cls_field
@@ -478,6 +552,11 @@ Public Sub init_lbls()
         .field_name = "lbl_deal_info"
         .field_width = Me.txt_deal_info.field_width
     End With
+    With Me.header_lbl_deal_name
+        .field_left = Me.txt_week_no.field_right
+        .field_name = "lbl_deal_name"
+        .field_width = Me.txt_ev_deal.field_width
+    End With
     With Me.header_lbl_deal_status
         .field_name = "lbl_deal_status"
         .field_width = Me.txt_deal_status.field_width
@@ -485,7 +564,6 @@ Public Sub init_lbls()
     With Me.header_lbl_ev
         .field_name = "lbl_ev"
         .field_width = Me.txt_ev_deal.field_width
-        .field_left = Me.txt_ev_deal.field_left
     End With
     With Me.header_lbl_deal_name
         .field_name = "lbl_deal_name"
@@ -536,6 +614,9 @@ Public Sub init_txt_fields()
     For Each form_field In Me.col_text_fields
         With form_field
             .field_left = -1
+            .field_height = utilities.twips_converter(0.6, "inch")
+            .field_top = 0
+            .field_type = load.field_type.text_field
             .field_visible = False
         End With
     Next form_field
@@ -543,6 +624,9 @@ Public Sub init_txt_fields()
     For Each form_field In Me.col_text_fields_us
     With form_field
             .field_left = -1
+            .field_height = utilities.twips_converter(0.6, "inch")
+            .field_top = 0
+            .field_type = load.field_type.text_field
             .field_visible = False
         End With
     Next form_field
@@ -550,14 +634,12 @@ Public Sub init_txt_fields()
     With Me.txt_broker
         .field_name = "broker_info"
         .field_name_in_recordset = "broker_info"
-        .field_top = 0
         .field_width = utilities.twips_converter(1, "inch")
     End With
     With Me.txt_budget_home
         .field_name = "budget_home"
         .field_name_in_recordset = "budget_home_spa_law"
         .field_name_in_table = "budget_home_id"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
         .margin_external_left = utilities.twips_converter(0.8, "inch") 'catering for control boxes to the left
     End With
@@ -565,125 +647,125 @@ Public Sub init_txt_fields()
         .field_name = "buyer_business_name"
         .field_name_in_recordset = "buyer_business_name"
         .field_name_in_table = "buyer_business_name"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_buyer_law_firm_1
         .field_name = "buyer_law_firm_1"
         .field_name_in_recordset = "buyer_law_firm_1"
         .field_name_in_table = "buyer_law_firm_1_id"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_deadline
         .field_name = "nbi_deadline"
         .field_name_in_recordset = "nbi_deadline"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_deal_id
         .field_name = "deal_id"
         .field_name_in_recordset = "deal_id"
-        .field_top = 0
         .field_width = utilities.twips_converter(0.5, "inch")
     End With
     With Me.txt_deal_info
         .field_name = "deal_info"
         .field_name_in_recordset = "deal_info"
-        .field_top = 0
         .field_width = utilities.twips_converter(3, "inch")
     End With
     With Me.txt_deal_name
         .field_name = "deal_name"
         .field_name_in_recordset = "deal_name_risk_type"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_deal_status
         .field_name = "deal_status"
         .field_name_in_recordset = "deal_status_xs"
+        .margin_external_left = 0
         If load.system_info.app_continent = load.system_info.continents.americas Then
             .field_name_in_recordset = "deal_status_us_xs"
             .margin_external_left = utilities.twips_converter(0.8, "inch") 'catering for control boxes to the left
         End If
-        .field_top = 0
         .field_width = utilities.twips_converter(0.9, "inch")
     End With
     With Me.txt_ev_deal
-        .field_left = utilities.twips_converter(1.9, "inch")
         .field_name = "ev_deal"
         .field_name_in_recordset = "ev_deal"
-        .field_top = 0
         .field_width = utilities.twips_converter(0.8, "inch")
     End With
     With Me.txt_is_repeat_buyer
         .field_name = "is_repeat_buyer"
         .field_name_in_recordset = "is_repeat_buyer"
-        .field_top = 0
         .field_width = utilities.twips_converter(0.5, "inch")
     End With
     With Me.txt_max_limit_quoted
         .field_name = "max_limit_quoted"
         .field_name_in_recordset = "max_limit_quoted"
-        .field_top = 0
         .field_width = utilities.twips_converter(1, "inch")
     End With
     With Me.txt_re_quote_info
         .field_name = "re_quote_info"
         .field_name_in_recordset = "re_quote_info"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
+    End With
+    With Me.txt_row_bg
+        .field_left = 0
+        .field_name = "row_bg"
+        .field_width = utilities.twips_converter(15, "inch")
     End With
     With Me.txt_risk_type_major_id
         .field_name = "risk_type_major_id"
         .field_name_in_recordset = "risk_type_major_id"
-        .field_top = 0
         .field_width = utilities.twips_converter(0.5, "inch")
     End With
     With Me.txt_roles
         .field_name = "roles"
         .field_name_in_recordset = "-1"
-        .field_top = 0
         .field_width = utilities.twips_converter(0.8, "inch")
     End With
     With Me.txt_row_bg
         .field_name = "row_bg"
         .field_name_in_recordset = "-1"
-        .field_top = 0
         .field_width = utilities.twips_converter(20, "inch")
     End With
     With Me.txt_submission_limits
         .field_name = "submission_limits"
         .field_name_in_recordset = "submission_limits"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_submission_notes
         .field_name = "submission_notes"
         .field_name_in_recordset = "submission_notes"
-        .field_top = 0
         .field_width = utilities.twips_converter(2.6, "inch")
     End With
     With Me.txt_target_business_name
         .field_name = "target_business_name"
         .field_name_in_recordset = "target_business_name"
-        .field_top = 0
         .field_width = utilities.twips_converter(1.2, "inch")
     End With
     With Me.txt_target_description
         .field_name = "target_description"
         .field_name_in_recordset = "target_desc"
-        .field_top = 0
         .field_width = utilities.twips_converter(2, "inch")
     End With
     With Me.txt_week_no
+        .field_left = 0
         .field_name = "week_no"
-        .field_name_in_recordset = ""
-        .field_top = 0
+        .field_name_in_recordset = "week_no"
         .field_width = utilities.twips_converter(0.7, "inch")
     End With
 End Sub
-
+Public Sub init_txts_with_dependencies()
+    With Me.txt_budget_home_us
+        .field_height = Me.txt_budget_home_change.field_height
+        .field_left = Me.txt_deal_status.field_left + Me.txt_deal_status.margin_external_left
+        .field_name = "budget_home_us"
+        .field_name_in_recordset = "budget_home"
+        .field_top = Me.txt_deal_status.field_bottom - .field_height
+        .field_visible = False
+        If load.system_info.app_continent = load.system_info.continents.americas Then
+            .field_visible = True
+        End If
+        .field_width = Me.txt_deal_status.field_width
+    End With
+End Sub
 Public Sub paint_visible_only(ByVal input_col As Collection)
     Dim proc_name As String
     proc_name = "cls_form_weekly_view.paint_visible_only"
@@ -693,7 +775,7 @@ Public Sub paint_visible_only(ByVal input_col As Collection)
     If load.is_debugging = True Then On Error GoTo 0
     
     Dim form_field As cls_field
-    Forms(Me.form_name).Controls("week_no").SetFocus
+    Forms(Me.form_name).Controls("selector_operational_re").SetFocus
     For Each form_field In input_col
         With Forms(Me.form_name).Controls(form_field.field_name)
             If .Visible = True Then
@@ -738,7 +820,6 @@ Public Sub paint(ByVal input_col As Collection)
     Dim form_field_prev As cls_field
     Dim margin_external_left As Long
     
-    Set form_field_prev = Me.txt_ev_deal
     For Each form_field In input_col
         With Forms(Me.form_name).Controls(form_field.field_name)
             

@@ -288,13 +288,17 @@ err_handler:
     GoTo outro
 End Sub
 Public Sub sub_control_f()
-    'intro
+    Const proc_name As String = "open_forms.sub_control_f"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
-    Dim rs As ADODB.Recordset, str_sql As String, i As Integer
-    
+    Dim rs As ADODB.Recordset
+    Dim str_sql As String
+    Dim i As Integer
+    Dim arr_controls() As Variant
     Dim str_form As String
+    
     str_form = "sub_control_f"
     If CurrentProject.AllForms(str_form).IsLoaded = False Then DoCmd.OpenForm str_form
     
@@ -304,15 +308,9 @@ Public Sub sub_control_f()
         DoCmd.MoveSize Right:=200, Down:=200, Width:=21000, Height:=14000
         
         'add items to combo boxes
-        'remove any existing lists
         i = 1
-        Dim arr_controls() As Variant
         ReDim arr_controls(0 To 50, 0 To 1)
         arr_controls(i, 0) = "header_target_legal_jurisdiction_id"
-        arr_controls(i, 1) = "SELECT jurisdiction_id id, jurisdiction menu_item FROM " & load.sources.jurisdictions_view & " WHERE jurisdiction_type = 'country' ORDER BY jurisdiction"
-        
-        i = i + 1
-        arr_controls(i, 0) = "header_spa_law"
         arr_controls(i, 1) = "SELECT jurisdiction_id id, jurisdiction menu_item FROM " & load.sources.jurisdictions_view & " WHERE jurisdiction_type = 'country' ORDER BY jurisdiction"
         
         i = i + 1
@@ -354,25 +352,11 @@ Public Sub sub_control_f()
         i = i + 1
         arr_controls(i, 0) = "header_super_sector_selector"
         arr_controls(i, 1) = "SELECT sector_id id, sector_name menu_item FROM " & sources.sectors_table & " WHERE is_deleted = 0 AND sector_type = " & load.super_sector & " ORDER BY sector_name"
-        
-        i = i + 1
-        arr_controls(i, 0) = "header_deal_status_id"
-        arr_controls(i, 1) = load.sources.menu_lists.deal_statuses
-        
-        i = i + 1
-        arr_controls(i, 0) = "header_nbi_prepper"
-        arr_controls(i, 1) = "SELECT id, uw_initials menu_item FROM " & sources.underwriters_view & " WHERE is_employed_id = 93 AND user_type = 150 ORDER BY uw_initials"
-        
-        i = i + 1
-        arr_controls(i, 0) = "header_budget_home"
-        arr_controls(i, 1) = "SELECT entity_id id, entity_business_name menu_item FROM " & load.sources.entities_table & " WHERE is_deleted = 0 AND entity_type = 475 ORDER BY entity_business_name"
 
         arr_controls(0, 0) = i
         
         For i = 1 To arr_controls(0, 0)
-            Do While .Controls(arr_controls(i, 0)).ListCount > 0
-                .Controls(arr_controls(i, 0)).RemoveItem (0)
-            Loop
+            .Controls(arr_controls(i, 0)).RowSource = ""
         Next i
         
         'add 'all options'
@@ -384,13 +368,12 @@ Public Sub sub_control_f()
         !header_super_sector_selector.AddItem "-10;'Real estate+'"
         !header_super_sector_selector.AddItem "-5;-----"
         
-        
-        'add Nordics as an RP entity
-        !header_budget_home.AddItem load.nordic_rp_entity & ";Nordics"
+        .Controls("header_deal_status_id").RowSource = load.sources.menu_lists.row_source_deal_statuses
+        .Controls("header_nbi_prepper").RowSource = load.sources.menu_lists.row_sources_uws_current
+        .Controls("header_spa_law").RowSource = load.sources.menu_lists.row_source_jurisdictions
+        .Controls("header_budget_home").RowSource = load.nordic_rp_entity & ";Nordics;" & load.sources.menu_lists.row_source_budget_homes
         
         'add new values
-        On Error GoTo err_handler
-        If load.is_debugging = True Then On Error GoTo 0
         For i = 1 To arr_controls(0, 0)
             str_sql = arr_controls(i, 1)
             Set rs = utilities.create_adodb_rs(conn, str_sql): rs.Open
@@ -418,21 +401,11 @@ Public Sub sub_control_f()
     End With
 
 outro:
+    utilities.call_stack_remove_last_item
     Exit Sub
-    
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "open_forms.sub_control_f"
-        .milestone = "str_sql = " & str_sql
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "str_sql = " & str_sql, "", "", True
+    Resume outro
 End Sub
 
 
@@ -512,6 +485,7 @@ Public Sub weekly_view_f()
     Dim cmd_foreign_deals As cls_field
     Dim control_name As String
     Dim current_control As Access.Control
+    Dim fc As Access.FormatCondition
     Dim form_field As cls_field
     Dim row_source As String
     Dim rs As ADODB.Recordset
@@ -531,9 +505,14 @@ Public Sub weekly_view_f()
             For Each form_field In .col_header_labels_us
                 form_field.field_visible = True
             Next form_field
+            For Each form_field In .col_cmds_change_us
+                form_field.field_visible = True
+            Next form_field
             
             .paint .col_text_fields_us
             .paint .col_header_labels_us
+            .init_cmds
+            .paint .col_cmds_change_us
         Else
             For Each form_field In .col_text_fields
                 form_field.field_visible = True
@@ -541,17 +520,30 @@ Public Sub weekly_view_f()
             For Each form_field In .col_header_labels
                 form_field.field_visible = True
             Next form_field
+            For Each form_field In .col_cmds_change
+                form_field.field_visible = True
+            Next form_field
             
             .paint .col_text_fields
             .paint .col_header_labels
+            .init_cmds
+            .paint .col_cmds_change
         End If
-        .init_cmds
-        .paint .col_cmds_change
+        
+        .init_txts_with_dependencies
+        utilities.paint_control str_form, .col_txts_with_dependencies
+            
+        .paint .tog_foreign_deals.col_controls
+        .paint .tog_view_density.col_controls
+        
         .header_cmd_foreign_deals.field_value = True
     End With
     
     With Forms(str_form)
         'add values to combo box
+        
+        .Controls(global_vars.interfaces.weekly_view_f.txt_budget_home_change.field_name).RowSource = load.sources.menu_lists.row_source_budget_homes
+        
         Dim arr_controls() As Variant, i As Integer
         ReDim arr_controls(0 To 10, 0 To 1)
         
@@ -578,9 +570,9 @@ Public Sub weekly_view_f()
         Next i
         
         control_name = global_vars.interfaces.weekly_view_f.header_selector_uws.field_name
-        .Controls(control_name).RowSource = "0;_all;" & load.sources.menu_lists.row_sources_uws
+        .Controls(control_name).RowSource = "0;_all;" & load.sources.menu_lists.row_sources_uws_current
         
-        row_source = "-2;'Declined - aim for xs'; -1;'---'; " & load.sources.menu_lists.row_soruce_deal_statuses
+        row_source = "-2;'Declined - aim for xs'; -1;'---'; " & load.sources.menu_lists.row_source_deal_statuses
         .Controls(global_vars.interfaces.weekly_view_f.txt_deal_status_change.field_name).RowSource = row_source
         
         control_name = global_vars.interfaces.weekly_view_f.txt_nbi_prepper_change.field_name
@@ -608,7 +600,7 @@ Public Sub weekly_view_f()
         !header_budget_continent = load.current_uw.budget_continent_id
         !header_selector_uws = 0
         
-        Set cmd_foreign_deals = global_vars.interfaces.weekly_view_f.header_cmd_foreign_deals
+        Set cmd_foreign_deals = global_vars.interfaces.weekly_view_f.tog_foreign_deals.cmd_toggle
         
         'load recordset
         If load.system_info.app_continent = load.system_info.continents.americas Then
@@ -679,16 +671,18 @@ Public Sub weekly_view_f()
         End With
         
         'format submission notes based on whether the word 'joinder' is in there
-        With global_vars.interfaces.weekly_view_f
-            If load.system_info.app_continent = load.system_info.continents.americas Then
-                Set current_control = Forms(str_form).Controls(.txt_submission_notes.field_name)
-    
-'                Set objFormatConds = current_control.FormatConditions.Add(acExpression, _
-'                , instr("[" & .txt_submission_notes & "], ) = " & "joinder")
-                ' current_control.FormatConditions(0).BackColor = load.colors.yellow
-            End If
-        End With
+        control_name = global_vars.interfaces.weekly_view_f.txt_submission_notes.field_name
+        If load.system_info.app_continent = load.system_info.continents.americas Then
+            Set current_control = Forms(str_form).Controls(control_name)
+
+            With current_control
+                .FormatConditions.delete
+                Set fc = .FormatConditions.Add(acExpression, , "[submission_notes] Like ""*joinder*""")
+                fc.BackColor = load.colors.yellow_light
+            End With
+        End If
         
+        Set fc = Nothing
         Set current_control = Nothing
         
         'movesize
@@ -721,9 +715,8 @@ err_handler:
 
 End Sub
 Public Sub live_deals_f()
-    Dim proc_name As String
-    proc_name = "open_forms.live_deals_f"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "open_forms.live_deals_f"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -734,6 +727,7 @@ Public Sub live_deals_f()
     Dim i As Integer
     Dim objFormatConds As FormatCondition
     Dim str_form As String
+    Dim str_row_source As String
     
     str_form = "live_deals_f"
     If CurrentProject.AllForms(str_form).IsLoaded = False Then DoCmd.OpenForm str_form
@@ -787,10 +781,6 @@ Public Sub live_deals_f()
         arr_controls(i, 0) = "header_selector_operational_re"
         arr_controls(i, 1) = "SELECT DISTINCT(target_sector_group_2) id, ' ' menu_item FROM " & load.sources.live_deals_view
         
-        i = i + 1
-        arr_controls(i, 0) = "header_selector_uws"
-        arr_controls(i, 1) = load.sources.menu_lists.uws
-        
         arr_controls(0, 0) = i
         
         For i = 1 To arr_controls(0, 0)
@@ -802,10 +792,12 @@ Public Sub live_deals_f()
         .Controls(global_vars.interfaces.live_deals_f.header_selector_risk_type.field_name).AddItem "0;_all"
         .Controls(global_vars.interfaces.live_deals_f.header_selector_operational_re.field_name).AddItem "_all;_all"
         With .Controls(global_vars.interfaces.live_deals_f.header_selector_uws.field_name)
-            .AddItem "0;_all"
-            .AddItem "-1;'---'"
-            .AddItem load.current_uw.uw_id & ";" & load.current_uw.initials
-            .AddItem "-1;'---'"
+            str_row_source = "0;_all;" _
+            & "-1;'---';" _
+            & load.current_uw.uw_id & ";" & load.current_uw.initials & ";" _
+            & "-1;'---';" _
+            & load.sources.menu_lists.row_sources_uws_current
+            .RowSource = str_row_source
         End With
         
         Dim rs As ADODB.Recordset
@@ -930,6 +922,7 @@ Public Sub live_deals_f()
     End With
     
 outro:
+    utilities.call_stack_remove_last_item
     Exit Sub
 
 err_handler:
@@ -944,7 +937,7 @@ err_handler:
         .show_error_msg = True
         .send_error err_object
     End With
-    GoTo outro
+    Resume outro
 
 End Sub
 Public Sub live_deals_f_move_size(ByVal deal_count As Long)
@@ -1171,34 +1164,22 @@ Public Sub deal_details_f(ByVal deal_id As Long)
         DoCmd.MoveSize Right:=50, Down:=50, Width:=21000, Height:=12500
         
         With Forms(str_form)
-            'add values to combo boxes.
+            '29 october 2025, CK: new way of adding values to combo boxes
             
-            'add countries to country drop-downs. Separate process to reduce queries to database.
-            ReDim arr_controls(0 To 100, 0 To 1)
-            i = 1
-            arr_controls(i, 0) = "spa_law"
+            .Controls(global_vars.data_fields.budget_home_id.field_name).RowSource = load.sources.menu_lists.row_source_budget_homes
+            .Controls(load.deal_details.txt_deal_status_id.field_name).RowSource = load.sources.menu_lists.row_source_deal_statuses
             
-            i = i + 1
-            arr_controls(i, 0) = "insured_registered_country_id"
+            'countries
+            .Controls("insured_registered_country_id").RowSource = load.sources.menu_lists.row_source_jurisdictions
+            .Controls("spa_law").RowSource = load.sources.menu_lists.row_source_jurisdictions
+            .Controls("target_country").RowSource = load.sources.menu_lists.row_source_jurisdictions
+            .Controls("target_main_jurisdiction_id").RowSource = load.sources.menu_lists.row_source_jurisdictions
             
-            i = i + 1
-            arr_controls(i, 0) = "target_country"
-            
-            i = i + 1
-            arr_controls(i, 0) = "target_main_jurisdiction_id"
-            
-            arr_controls(0, 0) = i
-            
-            For i = 1 To arr_controls(0, 0)
-                .Controls(arr_controls(i, 0)).RowSource = ""
-                box_input = ""
-                For y = 0 To UBound(load.country_list)
-                    If load.country_list(y, 1) <> "_all" Then
-                        box_input = box_input & load.country_list(y, 0) & ";" & load.country_list(y, 1) & ";"
-                    End If
-                Next y
-                .Controls(arr_controls(i, 0)).RowSource = box_input
-            Next i
+            'uws
+            .Controls("nbi_prepper_id").RowSource = load.sources.menu_lists.row_sources_uws_current
+            .Controls("primary_uw").RowSource = load.sources.menu_lists.row_sources_uws_current
+            .Controls("secondary_uw").RowSource = load.sources.menu_lists.row_sources_uws_current
+            .Controls("analyst_id").RowSource = load.sources.menu_lists.row_sources_uws_current
             
             'add items based on pre-loaded broker_firm array (to reduce queries to the db)
             With .Controls("broker_firm_id")
@@ -1231,7 +1212,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
                 .Controls(arr_controls(i, 0)).RowSource = box_input
             Next i
                 
-             
             'add law firms to drop-downs
             ReDim arr_controls(0 To 100, 0 To 1)
             i = i
@@ -1274,16 +1254,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
                 Next y
                  .Controls(arr_controls(i, 0)).RowSource = box_input
             Next i
-            
-            'add deal statuses
-            Dim menu_item As Scripting.Dictionary
-            box_input = ""
-            With .Controls(load.deal_details.txt_deal_status_id.field_name)
-                For Each menu_item In global_vars.col_deal_statuses
-                    box_input = box_input & menu_item("id") & ";'" & menu_item("menu_item") & "'" & ";"
-                Next menu_item
-                .RowSource = box_input
-            End With
     
             'add the rest of the combo boxes
 
@@ -1303,10 +1273,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
             i = i + 1
             arr_controls(i, 0) = "vat_home"
             arr_controls(i, 1) = "SELECT id, entity_business_name menu_item FROM " & load.sources.rp_entity_info_view & " WHERE entity_type = 475"
-            
-            i = i + 1
-            arr_controls(i, 0) = "budget_home_id"
-            arr_controls(i, 1) = "SELECT id, entity_business_name menu_item FROM " & load.sources.rp_entity_info_view & " WHERE entity_type = 475 ORDER BY entity_business_name"
             
             i = i + 1
             arr_controls(i, 0) = "primary_insurer"
@@ -1347,25 +1313,6 @@ Public Sub deal_details_f(ByVal deal_id As Long)
             i = i + 1
             arr_controls(i, 0) = load.deal_details.txt_uw_financial_advisor_id.field_name
             arr_controls(i, 1) = "SELECT id, firm_name menu_item FROM " & load.sources.financial_advisors_view & " WHERE is_counsel = " & load.yes & " ORDER BY firm_name"
-            
-            'controls with logic
-            
-            'three column boxes
-            i = i + 1
-            arr_controls(i, 0) = "nbi_prepper_id"
-            arr_controls(i, 1) = load.sources.menu_lists.uws
-            
-            i = i + 1
-            arr_controls(i, 0) = "primary_uw"
-            arr_controls(i, 1) = load.sources.menu_lists.uws
-            
-            i = i + 1
-            arr_controls(i, 0) = "secondary_uw"
-            arr_controls(i, 1) = load.sources.menu_lists.uws
-            
-            i = i + 1
-            arr_controls(i, 0) = "analyst_id"
-            arr_controls(i, 1) = load.sources.menu_lists.uws
             
             i = i + 1
             arr_controls(i, 0) = "internal_approver_quote_id"
