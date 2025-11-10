@@ -2504,6 +2504,18 @@ Public Function report_frame_for_claims_per_policy() As Variant
     report_frame(x, 2) = 16
     report_frame(x, 3) = xlLeft
     report_frame(x, 4) = 0
+    x = x + 1
+    report_frame(x, 0) = "Primary UW"
+    report_frame(x, 1) = "primary_uw_full_name"
+    report_frame(x, 2) = 12
+    report_frame(x, 3) = xlLeft
+    report_frame(x, 4) = 0
+    x = x + 1
+    report_frame(x, 0) = "Second UW"
+    report_frame(x, 1) = "second_uw_full_name"
+    report_frame(x, 2) = 12
+    report_frame(x, 3) = xlLeft
+    report_frame(x, 4) = 0
     
     report_frame(0, 0) = x
     
