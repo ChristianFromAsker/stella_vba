@@ -225,12 +225,25 @@ outro:
 End Sub
 
 Private Sub cmd_generate_rr_Click()
-    load.call_stack = "deal_details_f.cmd_generate_rr"
+    Const proc_name As String = "deal_details_f.cmd_generate_rr"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    load.event_id = utilities.get_event_id
+    open_forms.working_on_it_f "Preparing risk review", "This might take a minute, so hold on please.", 4000
+    load.check_conn_and_variables
+    
     load.deal_details.print_rr Me!deal_id
     
 outro:
+    open_forms.working_on_it_f__close
     load.call_stack = ""
-    
+    load.event_id = ""
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "me!deal_id", "", "", True
+    Resume outro
 End Sub
 
 Private Sub cmd_open_workspace_Click()
@@ -1066,6 +1079,12 @@ Private Sub cmdDelete_Click()
     Forms(Me.Name).Visible = False
     
 outro:
+    If tx_started = True And Not load.conn Is Nothing Then
+        If load.conn.State = adStateOpen Then
+            load.conn.RollbackTrans
+        End If
+    End If
+    
     Set col_policies = Nothing
     load.call_stack = ""
     load.event_id = ""
@@ -1896,12 +1915,6 @@ Private Sub primary_or_xs_id_AfterUpdate()
     conn.Execute "UPDATE " & sources.deals_table & " SET primary_or_xs_id = " & new_value & " WHERE deal_id = " & Me!deal_id
     Me.Controls(Screen.ActiveControl.Name).BackColor = colors.white
     
-    'delete when unification is done
-    If load.system_info.app_continent = load.system_info.continents.americas Then
-        conn.Execute "UPDATE " & sources.deals_table & " SET primary_or_xs = " & new_value & " WHERE deal_id = " & Me!deal_id
-    End If
-    'dend delete
-    
     '25 April 2025, CK: To avoid uws forgetting to set UW fees to 0 when deal is xs only
     With load.deal_details.txt_uw_fee
         If Me.Controls(.field_name) > 0 And new_value = menu_list.xs_only Then
@@ -1981,11 +1994,6 @@ Private Sub risk_type_id_AfterUpdate()
     load.check_conn_and_variables
     conn.Execute "UPDATE " & sources.deals_table & " SET risk_type_id = " & Me!risk_type_id & " WHERE deal_id = " & Me!deal_id
     Me.Controls(Screen.ActiveControl.Name).BackColor = colors.white
-    
-    'delete when unfication is done
-    If load.system_info.app_continent = load.system_info.continents.americas Then
-        conn.Execute "UPDATE deals_t SET risk_type = " & Me!risk_type_id & " WHERE deal_id = " & Me!deal_id
-    End If
     
     Me!risk_type_id.BackColor = colors.white
     
