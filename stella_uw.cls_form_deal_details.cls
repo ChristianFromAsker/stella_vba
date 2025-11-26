@@ -344,10 +344,14 @@ Public form_name As String
 Public deal_tags As New cls_deal_tags
 
 Public Sub init_collections()
-load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.init_collections"
-Dim form_field As cls_field
+    Const proc_name As String = "cls_form_deal_deatils.init_collections"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
 
-'misc fields
+    Dim form_field As cls_field
+
+    'misc fields
     Set Me.col_misc_txt_fields = Nothing
     With Me.col_misc_txt_fields
         .Add Me.notifiation_area
@@ -771,7 +775,12 @@ Dim form_field As cls_field
         .Add Me.lbl_closing_set_received
         .Add Me.txt_closing_set_received
     End With
-    
+
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_notification_area(ByVal deal_id As Long)
     With Me.notifiation_area
@@ -803,8 +812,15 @@ Public Sub refresh_third_column()
     Me.refresh_misc_section
 End Sub
 Public Sub refresh_deal_details(ByVal deal_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.refresh_deal_details"
-    Dim form_field As cls_field, above_field As cls_field, field_counter As Integer, field_left As Long
+    Const proc_name As String = "cls_form_deal_details.refresh_deal_details"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim above_field As cls_field
+    Dim field_counter As Integer
+    Dim field_left As Long
     
     Me.init_notification_area deal_id
     
@@ -956,13 +972,23 @@ Public Sub refresh_deal_details(ByVal deal_id As Long)
 outro:
     Set above_field = Nothing
     Set form_field = Nothing
-    
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 
 Public Sub init(Optional ByVal deal_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.init"
-    Dim form_field As cls_field, above_field As cls_field
-    Dim field_left As Long, section_label_width As Long, section_field_width As Long
+    Const proc_name As String = "cls_form_deal_details.init"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim above_field As cls_field
+    Dim field_left As Long
+    Dim section_label_width As Long
+    Dim section_field_width As Long
     
     form_name = "deal_details_f"
     
@@ -1144,7 +1170,7 @@ Public Sub init(Optional ByVal deal_id As Long)
             With form_field
                 .field_bg_color = load.colors.label_bg
                 .border_color = load.colors.white
-                .left_margin = 50
+                .margin_internal_left = 50
                 .top_margin = 0
                 .font_is_bold = True
                 .font_color = load.colors.white
@@ -1190,10 +1216,19 @@ Public Sub init(Optional ByVal deal_id As Long)
 outro:
     Set above_field = Nothing
     Set form_field = Nothing
-    
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_nda_section()
-    Dim form_field As cls_field, above_field As cls_field
+    Const proc_name As String = "cls_form_deal_details.init_nda_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim above_field As cls_field
     Dim field_left As Long
     
     'header
@@ -1365,14 +1400,24 @@ Public Sub init_nda_section()
         .has_line = False
     End With
     Next form_field
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_nda_section()
     Dim form_field As cls_field, field_counter As Integer
     
 End Sub
 Public Sub init_admin_section()
-    Dim form_field As cls_field, field_left As Long
+    Const proc_name As String = "cls_form_deal_deatals.init_admin_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_left As Long
     
     'header
     With Me.header_admin
@@ -1490,11 +1535,21 @@ Public Sub init_admin_section()
         .has_line = False
     End With
     Next form_field
-            
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 
 Public Sub refresh_admin_section()
-    Dim form_field As cls_field, field_counter As Integer
+    Const proc_name As String = "cls_form_deal_details.refresh_admin_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_counter As Integer
     
     'header
     With Me.header_admin
@@ -1524,10 +1579,20 @@ Public Sub refresh_admin_section()
             .field_top = .above_field.field_bottom
         End With
     Next form_field
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_advisors_section()
-    Dim form_field As cls_field, field_left As Long
+    Const proc_name As String = "cls_form_deal_details.init_advisors_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_left As Long
     
     'header
     With Me.header_advisors
@@ -1632,6 +1697,11 @@ Public Sub init_advisors_section()
             .has_line = False
         End With
     Next form_field
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_advisors_section()
     Dim form_field As cls_field, field_counter As Integer
@@ -1657,6 +1727,11 @@ Public Sub refresh_advisors_section()
     
 End Sub
 Public Sub init_buyer_and_seller_section()
+    Const proc_name As String = "cls_form_deal_details.init_buyer_and_seller_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     Dim field_left As Long
     
@@ -1751,10 +1826,20 @@ Public Sub init_buyer_and_seller_section()
             .field_top = .above_field.field_bottom
         End With
     Next form_field
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_buyer_and_seller()
- Dim form_field As cls_field, field_counter As Integer
+    Const proc_name As String = "cls_form_deal_details.refresh_buyer_and_seller"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_counter As Integer
         
     'header
     With Me.header_buyer_and_seller
@@ -1774,9 +1859,18 @@ Public Sub refresh_buyer_and_seller()
             .field_top = .above_field.field_top + .above_field.field_height
         End With
     Next form_field
-
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_check_points_section()
+    Const proc_name As String = "cls_form_deal_details.init_check_points_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     
     'header
@@ -1941,10 +2035,21 @@ Public Sub init_check_points_section()
             .field_top = .above_field.field_bottom
         End With
     Next form_field
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 
 Public Sub refresh_check_points_section()
-    Dim form_field As cls_field, field_counter As Integer
+    Const proc_name As String = "cls_form_deal_details.refresh_check_points_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_counter As Integer
     
     'header
     With Me.header_closing_info
@@ -1972,10 +2077,20 @@ Public Sub refresh_check_points_section()
             .field_top = .above_field.field_bottom
         End With
     Next form_field
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_deal_and_target_info_section()
-    Dim form_field As cls_field, above_field As cls_field
+    Const proc_name As String = "cls_form_deal_details.init_deal_and_target_info_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim above_field As cls_field
     
     With Me.header_deal_and_target_info
         .field_name = "header_deal_and_target_info"
@@ -2178,14 +2293,22 @@ Public Sub init_deal_and_target_info_section()
     
     Set form_field = Nothing
     Set above_field = Nothing
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_deal_and_target_info_section()
     Dim form_field As cls_field
     
-    
 End Sub
 Public Sub init_financial_info_section()
+    Const proc_name As String = "cls_form_deal_details.init_financial_info_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     
     'header
@@ -2364,9 +2487,20 @@ Public Sub init_financial_info_section()
             If .field_top = 0 Then .field_top = .above_field.field_top + .above_field.field_height
         End With
     Next form_field
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_financial_info_section()
-    Dim form_field As cls_field, field_counter As Integer
+    Const proc_name As String = "cls_form_deal_deatils.refresh_financial_info_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_counter As Integer
     
     'header
     With Me.header_financial_info
@@ -2418,9 +2552,18 @@ Public Sub refresh_financial_info_section()
     With Me.txt_total_premium
         .field_top = Me.lbl_closing_premium.field_bottom
     End With
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_insurance_info_section()
+    Const proc_name As String = "cls_form_deal_details.init_insurance_info_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     
     'header
@@ -2686,7 +2829,11 @@ Public Sub init_insurance_info_section()
             .field_top = .above_field.field_bottom
         End With
     Next form_field
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_insurance_info_section()
     Dim form_field As cls_field
@@ -2712,6 +2859,11 @@ Public Sub refresh_insurance_info_section()
     
 End Sub
 Public Sub init_submisson_notes_section()
+    Const proc_name As String = "cls_form_deal_details.init_submisson_notes_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     
     'header
@@ -2784,10 +2936,20 @@ Public Sub init_submisson_notes_section()
         .field_name_in_recordset = "submission_limits"
         .field_top = Me.lbl_submission_limits.field_bottom
     End With
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_submission_notes_section()
-    Dim form_field As cls_field, field_counter As Integer
+    Const proc_name As String = "cls_form_deal_details.refresh_submission_notes_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_counter As Integer
     
     'header
     With Me.header_submission_notes
@@ -2840,10 +3002,21 @@ Public Sub refresh_submission_notes_section()
     With Me.txt_submission_limits
         .field_top = Me.lbl_submission_limits.field_bottom
     End With
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub init_misc_section()
-    Dim form_field As cls_field, field_left As Long, section_label_width As Long
+    Const proc_name As String = "cls_form_deal_details.init_misc_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim form_field As cls_field
+    Dim field_left As Long
+    Dim section_label_width As Long
         
     'header
     With Me.header_misc
@@ -2958,9 +3131,18 @@ Public Sub init_misc_section()
         .field_height = utilities.twips_converter(3, "cm")
         .field_width = Me.txt_comments.field_width
     End With
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub refresh_misc_section()
+    Const proc_name As String = "cls_form_deal_details.refresh_misc_section"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field, field_counter As Integer
 
     With Me.header_misc
@@ -3010,15 +3192,21 @@ Public Sub refresh_misc_section()
     With Me.txt_stella_message_board
         .field_top = Me.lbl_stella_message_board.field_bottom
     End With
-    
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 
 Public Sub set_bg_of_txt_fields_white()
-    load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.set_bg_of_text_fields_white"
+    Const proc_name As String = "cls_form_deal_details.set_bg_of_text_fields_white"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
-    Dim str_form As String, form_field As cls_field
+    Dim str_form As String
+    Dim form_field As cls_field
     str_form = load.deal_details.form_name
     
     For Each form_field In Me.col_all_text_fields
@@ -3028,26 +3216,15 @@ Public Sub set_bg_of_txt_fields_white()
 outro:
     If Not form_field Is Nothing Then Set form_field = Nothing
     Exit Sub
-
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "cls_form_deal_details.set_bg_of_txt_field_white"
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub paint_individual_fields(ByVal form_field As cls_field)
-    Dim proc_name As String
-    proc_name = "cls_form_deal_details.paint_individual_fields"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "cls_form_deal_details.paint_individual_fields"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
     
     If CurrentProject.AllForms(Me.form_name).IsLoaded = False Then
         GoTo outro
@@ -3067,29 +3244,17 @@ Public Sub paint_individual_fields(ByVal form_field As cls_field)
 
 outro:
     Exit Sub
-
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub paint_deal_details()
-    Dim proc_name As String
-    proc_name = "cls_form_deal_details.paint_deal_details"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "cls_form_deal_details.paint_deal_details"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
+    Dim form_field As cls_field
     Dim str_form As String
     Dim str_milestone As String
     str_form = load.deal_details.form_name
@@ -3097,8 +3262,6 @@ Public Sub paint_deal_details()
     If CurrentProject.AllForms(str_form).IsLoaded = False Then
         GoTo outro
     End If
-    
-    Dim form_field As cls_field
     
     For Each form_field In Me.col_headers
         With Forms(str_form).Controls(form_field.field_name)
@@ -3108,7 +3271,7 @@ Public Sub paint_deal_details()
             .ForeColor = form_field.font_color
             .FontBold = form_field.font_is_bold
             .FontSize = form_field.font_size
-            .LeftMargin = form_field.left_margin
+            .LeftMargin = form_field.margin_internal_left
             .TopMargin = form_field.top_margin
             .Top = form_field.field_top
             .Left = form_field.field_left
@@ -3215,26 +3378,21 @@ Public Sub paint_deal_details()
 outro:
     If Not form_field Is Nothing Then Set form_field = Nothing
     Exit Sub
-
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "cls_form_deal_details.paint_deal_details"
-        .milestone = "str_milestone = " & str_milestone
-        .params = ""
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, str_milestone, "", "", True
+    Resume outro
 End Sub
 Public Sub paint_financial_info_section(ByVal deal_id As Long)
+    Const proc_name As String = "cls_form_deal_details.paint_financial_info_section"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
-    Dim str_form As String, form_field As cls_field, str_sql As String, rs As ADODB.Recordset
+    
+    Dim str_form As String
+    Dim form_field As cls_field
+    Dim str_sql As String
+    Dim rs As ADODB.Recordset
+    
     str_form = "deal_details_f"
     
     If CurrentProject.AllForms(str_form).IsLoaded = False Then GoTo outro
@@ -3269,30 +3427,23 @@ outro:
     End If
     If Not form_field Is Nothing Then Set form_field = Nothing
     Exit Sub
-
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "cls_form_deal_details.paint_financial_info_section"
-        .milestone = ""
-        .params = "str_sql = " & str_sql
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = True
-        .send_error err_object
-    End With
-    
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "str_sql = " & str_sql, "", "", True
+    Resume outro
 End Sub
 
 Public Sub put_data_into_form(ByVal section_collection As Collection, ByVal deal_id As Long)
-    load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.put_data_into_form"
-    Dim str_form As String, rs As ADODB.Recordset
-    str_form = Me.form_name
+    Const proc_name As String = "cls_form_deal_details.put_data_into_form"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim str_form As String
+    Dim rs As ADODB.Recordset
     Dim str_sql As String
     Dim form_field As cls_field
     
+    str_form = Me.form_name
     'generate sql string
     For Each form_field In section_collection
         str_sql = str_sql & form_field.field_name_in_recordset & ", "
@@ -3310,8 +3461,18 @@ Public Sub put_data_into_form(ByVal section_collection As Collection, ByVal deal
     End With
     
     Set rs = Nothing
+outro:
+    Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Sub change_section_visible_status(ByRef section_collection As Collection)
+    Const proc_name As String = "cls_form_deal_details.change_section_visible_status"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim form_field As cls_field
     Dim new_visible_status As Boolean
     new_visible_status = True
@@ -3333,8 +3494,16 @@ Public Sub change_section_visible_status(ByRef section_collection As Collection)
     Next form_field
 outro:
     Exit Sub
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Sub
 Public Function are_there_claims_on_deal(ByVal deal_id As Long) As Boolean
+    Const proc_name As String = "cls_form_deal_deatils.are_there_claims_on_deal"
+    utilities.call_stack_add_item proc_name
+    On Error GoTo err_handler
+    If load.is_debugging = True Then On Error GoTo 0
+    
     Dim str_sql As String
     Dim rs As ADODB.Recordset
     
@@ -3350,11 +3519,24 @@ Public Function are_there_claims_on_deal(ByVal deal_id As Long) As Boolean
         .Close
     End With
     Set rs = Nothing
+outro:
+    Exit Function
+err_handler:
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "", "", True
+    Resume outro
 End Function
 Public Sub print_rr(ByVal deal_id As Long)
-   load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.print_rr"
+    Const proc_name As String = "cls_form_deal_details.print_rr"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
+    
+    Dim deal_folder As String
+    Dim retention_text_virtual As String
+    Dim rs As ADODB.Recordset
+    Dim str_currency As String
+    Dim str_sql As String
+    Dim str_target_path As String
     
     If load.system_info.app_continent <> load.system_info.continents.americas Then
         MsgBox "This only works for US deals.", , "Can't generate RR for non-US deals"
@@ -3362,31 +3544,25 @@ Public Sub print_rr(ByVal deal_id As Long)
     End If
     
     'check that deal folder exists
-    Dim deal_folder As String
-    deal_folder = Paths.folder_path_from_scripts(deal_id, "normative")
+    deal_folder = Paths.folder_path_from_scripts(deal_id, "find")
     If deal_folder = "-1" Then
         MsgBox "I could not find the deal folder, and can therefore not generate the risk review. Maybe it is not created?", , "Deal folder missing"
         GoTo outro
     End If
     
     'get deal name
-    Dim str_sql As String, rs As ADODB.Recordset
     str_sql = "SELECT deal_id, deal_name FROM " & load.sources.deals_table & " WHERE deal_id = " & deal_id
     Set rs = utilities.create_adodb_rs(conn, str_sql)
     With rs
         .Open
-    
-        'find target path for word
-        Dim str_target_path As String
         str_target_path = deal_folder & "\4. Underwriting\" & !deal_name & " - Risk Review.docx"
-    
         .Close
     End With
     
     'check if risk review already exists. Open if yes.
     If Not Dir(str_target_path, vbDirectory) = "" Then
         FollowHyperlink str_target_path
-        Exit Sub
+        GoTo outro
     End If
     
     'Fetch data
@@ -3395,8 +3571,6 @@ Public Sub print_rr(ByVal deal_id As Long)
         rs.MoveFirst
         
         'prepare retention text. Most texts are in the recordset, but this has to be calculated.
-        Dim retention_text_virtual As String
-        Dim str_currency As String
         str_currency = rs!deal_currency
         If str_currency = "USD" Then
             str_currency = "$"
@@ -3408,13 +3582,17 @@ Public Sub print_rr(ByVal deal_id As Long)
         End If
         
         'prepare program summary text. Word can replace strings with max 255 chars.
-        Dim program_summary_1 As String, program_summary_2 As String, program_summary_3 As String, program_summary_4 As String
-        program_summary_1 = Left(rs!program_summary, 255)
-        program_summary_2 = Mid(rs!program_summary, 256, 255)
-        program_summary_3 = Mid(rs!program_summary, 511, 255)
-        program_summary_4 = Mid(rs!program_summary, 766, 255)
+        Dim program_summary_1 As String
+        Dim program_summary_2 As String
+        Dim program_summary_3 As String
+        Dim program_summary_4 As String
+        If IsNull(rs!program_summary) = False Then
+            program_summary_1 = Left(rs!program_summary, 255)
+            program_summary_2 = Mid(rs!program_summary, 256, 255)
+            program_summary_3 = Mid(rs!program_summary, 511, 255)
+            program_summary_4 = Mid(rs!program_summary, 766, 255)
+        End If
         
-        'Add data to dictionary for later looping and insertion into word doc
         Dim input_data As Scripting.Dictionary
         Set input_data = New Scripting.Dictionary
         With input_data
@@ -3426,96 +3604,74 @@ Public Sub print_rr(ByVal deal_id As Long)
             .Add "target_business_name", rs!target_business_name.value
             .Add "target_desc", rs!target_desc.value
             .Add "buyer_business_name", rs!buyer_business_name.value
-            .Add "total_rp_limit_on_deal_hr", str_currency & " " & rs!total_rp_limit_on_deal_hr
+            .Add "total_rp_limit_on_deal_hr", str_currency & " " & rs!total_rp_limit_on_deal_hr.value
             .Add "retention_text_virtual", retention_text_virtual
-            .Add "total_rp_premium_on_deal_hr", str_currency & " " & rs!total_rp_premium_on_deal_hr
-            .Add "rol_hr", rs!rol_hr
-            .Add "inception_date", rs!inception_date
+            .Add "total_rp_premium_on_deal_hr", str_currency & " " & rs!total_rp_premium_on_deal_hr.value
+            .Add "rol_hr", Nz(rs!rol_hr.value, "")
+            .Add "inception_date", rs!inception_date.value
             .Add "closing_date", Nz(rs!closing_date, "**closing_date**")
-            .Add "uw_law_firm_hr", Nz(rs!uw_law_firm_hr, "")
-            .Add "uw_financial_advisor_hr", Nz(rs!uw_financial_advisor_hr, "")
-            .Add "primary_or_xs_hr", Nz(rs!primary_or_xs_hr, "primary_or_xs_hr")
-            .Add "program_summary_1", program_summary_1
-            .Add "program_summary_2", program_summary_2
-            .Add "program_summary_3", program_summary_3
-            .Add "program_summary_4", program_summary_4
-            .Add "comments", Nz(rs!Comments, " ")
-            .Add "buyer_law_firm_1", rs!buyer_law_firm_1
-            .Add "broker_firm", rs!broker_firm
-            .Add "risk_type", rs!risk_type
+            .Add "uw_law_firm_hr", Nz(rs!uw_law_firm_hr.value, "")
+            .Add "uw_financial_advisor_hr", Nz(rs!uw_financial_advisor_hr.value, "")
+            .Add "primary_or_xs_hr", Nz(rs!primary_or_xs_hr.value, "primary_or_xs_hr")
+            .Add "program_summary_1", Replace(program_summary_1, "<br>", vbNewLine)
+            .Add "program_summary_2", Replace(program_summary_2, "<br>", vbNewLine)
+            .Add "program_summary_3", Replace(program_summary_3, "<br>", vbNewLine)
+            .Add "program_summary_4", Replace(program_summary_4, "<br>", vbNewLine)
+            .Add "comments", Nz(rs!Comments.value, " ")
+            .Add "buyer_law_firm_1", rs!buyer_law_firm_1.value
+            .Add "broker_firm", rs!broker_firm.value
+            .Add "risk_type", rs!risk_type.value
         End With
-        
-        'find template file
-        Dim str_template_path As String
-        str_template_path = load.system_info.system_paths.template_path & "rr_us_with_codes.docx"
-        
-        'Copy template to deal folder
-        FileCopy str_template_path, str_target_path
-        
-        'open word
-        Dim WordApp As Word.Application
-        Set WordApp = New Word.Application
-        WordApp.Visible = False
-        
-        'open risk review
-        Dim word_document As Word.Document
-        Set word_document = WordApp.Documents.Open(str_target_path)
-        Dim item As Variant
-        
-        'insert data into risk review
-        With word_document.Content.Find
-            For Each item In input_data
-                .Text = "**" & item & "**"
-                .Replacement.Text = input_data(item)
-                .Forward = True
-                .Wrap = wdFindContinue
-                .Format = False
-                .MatchCase = False
-                .MatchWholeWord = False
-                .MatchWildcards = False
-                .MatchSoundsLike = False
-                .MatchAllWordForms = False
-                .Execute Replace:=wdReplaceAll
-            Next item
-        End With
-        Set input_data = Nothing
-        WordApp.Visible = True
-        word_document.Save
-        word_document.Close: Set word_document = Nothing
-        Set WordApp = Nothing
-        FollowHyperlink str_target_path
-        
-    '1 September 2022: conn and rs cannot be closed earlier because the dictionary items are relative references.
     rs.Close
-        'save to pdf. Not used, but expect it will.
-        If 0 Then
-            ActiveDocument.ExportAsFixedFormat OutputFileName:="NEED PATH", _
-                ExportFormat:=wdExportFormatPDF, OpenAfterExport:=True, OptimizeFor:= _
-                wdExportOptimizeForPrint, Range:=wdExportAllDocument, From:=1, To:=1, _
-                item:=wdExportDocumentContent, IncludeDocProps:=True, KeepIRM:=True, _
-                CreateBookmarks:=wdExportCreateNoBookmarks, DocStructureTags:=True, _
-                BitmapMissingFonts:=True, UseISO19005_1:=False
-        End If
+    Set rs = Nothing
+        
+    'find template file
+    Dim item As Variant
+    Dim str_template_path As String
+    Dim word_document As Word.Document
+    Dim WordApp As Word.Application
+    
+    str_template_path = load.system_info.system_paths.template_path & "rr_us_with_codes.docx"
+    
+    'Copy template to deal folder
+    FileCopy str_template_path, str_target_path
+
+    Set WordApp = New Word.Application
+    WordApp.Visible = False
+    Set word_document = WordApp.Documents.Open(str_target_path)
+    
+    'insert data into risk review
+    With word_document.Content.Find
+        For Each item In input_data
+            .Text = "**" & item & "**"
+            .Replacement.Text = input_data(item)
+            .Forward = True
+            .Wrap = wdFindContinue
+            .Format = False
+            .MatchCase = False
+            .MatchWholeWord = False
+            .MatchWildcards = False
+            .MatchSoundsLike = False
+            .MatchAllWordForms = False
+            .Execute Replace:=wdReplaceAll
+        Next item
+    End With
+    Set input_data = Nothing
+    WordApp.Visible = True
+    word_document.Save
+    WordApp.Activate
+    Set word_document = Nothing
+    Set WordApp = Nothing
+    
 outro:
     If Not rs Is Nothing Then
         If rs.State = 1 Then rs.Close
         Set rs = Nothing
     End If
     Exit Sub
-        
 err_handler:
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "cls_form_deal_details.print_rr"
-        .milestone = ""
-        .params = "deal_id = " & deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    GoTo outro
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "deal_id = " & deal_id, "", True
+    Resume outro
 End Sub
 
 Public Sub sort_all_fields_in_form_for_debugging()
@@ -3560,12 +3716,14 @@ Public Sub add_regions_to_insured_main_region_id()
     
 End Sub
 Public Function are_required_field_to_start_cm_populated(ByVal deal_id As Long) As Boolean
-    load.call_stack = load.call_stack & vbNewLine & "cls_form_deal_details.are_required_field_to_start_cm_populated"
+    Const proc_name As String = "cls_form_deal_details.are_required_field_to_start_cm_populated"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
     Dim col_missing_fields As Collection
     Dim form_field As cls_field
+    
     Set col_missing_fields = mandatory_data.check_data(deal_id, load.mandatory_tests.open_cm)
     If col_missing_fields.Count > 0 Then
         For Each form_field In col_missing_fields
@@ -3581,29 +3739,14 @@ Public Function are_required_field_to_start_cm_populated(ByVal deal_id As Long) 
     
 outro:
     Exit Function
-
 err_handler:
     are_required_field_to_start_cm_populated = "-1"
-    
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = "cls_form_deal_details.are_required_fields_to_start_cm_populdated"
-        .milestone = ""
-        .params = "deal_id = " & deal_id & ", str_sql = " & str_sql
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
-
+    Central.err_handler proc_name, Err.Number, Err.Description, str_sql, "deal_id = " & deal_id, "", True
+    Resume outro
 End Function
 Public Function folders_create_folder_us(ByVal obj_deal As cls_deal) As Integer
-    Dim proc_name As String
-    proc_name = "cls_form_deal_details.folders_create_folder_us"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
+    Const proc_name As String = "cls_form_deal_details.folders_create_folder_us"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -3696,33 +3839,16 @@ outro:
         End If
         Set rs = Nothing
     End If
-    
     Exit Function
-    
 err_handler:
     folders_create_folder_us = -1
-    
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = "deal_id = " & obj_deal.deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "obj_deal.deal_id = " & obj_deal.deal_id, "", True
+    Resume outro
 End Function
 
 Public Function folders_create_folder_eurasia(ByVal obj_deal As cls_deal) As Integer
-    Dim proc_name As String
-    proc_name = "cls_form_deal_details.create_folder_eurasia"
-    load.call_stack = load.call_stack & vbNewLine & proc_name
-    
+    Const proc_name As String = "cls_form_deal_details.create_folder_eurasia"
+    utilities.call_stack_add_item proc_name
     On Error GoTo err_handler
     If load.is_debugging = True Then On Error GoTo 0
     
@@ -3831,24 +3957,10 @@ Public Function folders_create_folder_eurasia(ByVal obj_deal As cls_deal) As Int
     
 outro:
     Exit Function
-    
 err_handler:
     folders_create_folder_eurasia = -1
-    
-    Dim err_object As cls_err_object
-    Set err_object = New cls_err_object
-    With err_object
-        .routine_name = proc_name
-        .milestone = ""
-        .params = "deal_id = " & obj_deal.deal_id
-        .system_error_code = Err.Number
-        .system_error_text = Err.Description
-        .show_error_msg = False
-        .send_error err_object
-    End With
-    
-    GoTo outro
-    
+    Central.err_handler proc_name, Err.Number, Err.Description, "", "obj_deal.deal_id = " & obj_deal.deal_id, "", True
+    Resume outro
 End Function
 
 
